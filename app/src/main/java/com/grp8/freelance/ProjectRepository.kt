@@ -36,7 +36,7 @@ class ProjectRepository(private val context: Context) {
         val clientName: String,
         val deadlineDate: String,
         val hoursNeeded: Double,
-        val ratePerHour: Int
+        val ratePerHour: Double
     )
 
     private fun Project.toJson() = ProjectJson(id, name, clientName, deadlineDate.toString(), hoursNeeded, ratePerHour)

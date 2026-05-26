@@ -33,11 +33,9 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun addProject(name: String, clientName: String, deadline: LocalDate, hours: Double, rate: Int) {
-        _projects.value = _projects.value + Project(idCtr++, name, clientName, deadline, hours, rate)
-        viewModelScope.launch { repository.save(_projects.value) }
+    fun addProject(name: String, clientName: String, deadline: LocalDate, hours: Double, rate: Double) {
+        _projects.value += Project(idCtr++, name, clientName, deadline, hours, rate)
     }
-
     fun removeProject(id: Int) {
         _projects.value = _projects.value.filter { it.id != id }
         viewModelScope.launch { repository.save(_projects.value) }
