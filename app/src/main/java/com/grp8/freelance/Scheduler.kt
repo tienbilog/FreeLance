@@ -30,7 +30,8 @@ object Scheduler {
                 return
             }
             val proj = sorted[index]
-            var placed = false
+
+            // Try placing the project on every valid day up to its deadline
             var day = today
             while (!day.isAfter(proj.deadlineDate)) {
                 val avail = dayHours[day] ?: 0.0
@@ -38,17 +39,15 @@ object Scheduler {
                     dayHours[day] = avail - proj.hoursNeeded
                     assignment[index] = day
                     backtrack(index + 1, assignment, income + proj.totalIncome)
-                    dayHours[day] = avail
-                    assignment[index] = null
-                    placed = true
-                    break
+                    dayHours[day] = avail          // restore hours
+                    assignment[index] = null       // restore assignment
                 }
                 day = day.plusDays(1)
             }
-            if (!placed) {
-                assignment[index] = null
-                backtrack(index + 1, assignment, income)
-            }
+
+            // Also try skipping this project entirely
+            assignment[index] = null
+            backtrack(index + 1, assignment, income)
         }
 
         backtrack(0, mutableMapOf(), 0)
