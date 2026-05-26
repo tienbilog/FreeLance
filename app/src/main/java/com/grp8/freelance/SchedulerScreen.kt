@@ -1,31 +1,43 @@
 package com.grp8.freelance
 
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.grp8.freelance.ui.theme.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+
+val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
+val DATE_INPUT_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy")
+
+// ── Entry point ───────────────────────────────────────────────
 
 @Composable
 fun SchedulerApp(viewModel: SchedulerViewModel) {
     val result by viewModel.result.collectAsStateWithLifecycle()
-
-    // Show results screen if we have a result, otherwise show input screen
     if (result != null) {
-        ResultsScreen(
-            result = result!!,
-            onBack = { viewModel.clearResult() }
-        )
+        ResultsScreen(result = result!!, onBack = { viewModel.clearResult() })
     } else {
         InputScreen(viewModel = viewModel)
     }
@@ -37,159 +49,364 @@ fun SchedulerApp(viewModel: SchedulerViewModel) {
 fun InputScreen(viewModel: SchedulerViewModel) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     val dailyCap by viewModel.dailyCap.collectAsStateWithLifecycle()
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    if (showAddDialog) {
+        AddProjectDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, client, deadline, hours, rate ->
+                viewModel.addProject(name, client, deadline, hours, rate)
+                showAddDialog = false
+            }
+        )
+    }
 
     Scaffold(
+        containerColor = White,
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
+            Surface(color = White, tonalElevation = 0.dp) {
                 Button(
                     onClick = { viewModel.runScheduler() },
+                    enabled = projects.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    enabled = projects.isNotEmpty()
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
                 ) {
-                    Text("Run Scheduler", fontSize = 16.sp)
+                    Text("Run Scheduler", fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        fontFamily = InterFamily)
                 }
             }
         }
     ) { padding ->
         LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(padding)
+            contentPadding = PaddingValues(
+                start = 20.dp, end = 20.dp,
+                top = 24.dp, bottom = padding.calculateBottomPadding() + 8.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Text("Freelance Scheduler", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Freelance\nScheduler",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Ink,
+                    lineHeight = 34.sp
+                )
                 Spacer(Modifier.height(4.dp))
-            }
-
-            // Daily cap slider
-            item {
-                CapSlider(
-                    value = dailyCap,
-                    onChange = { viewModel.setDailyCap(it) }
+                Text(
+                    "Plan your week. Maximize income.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SlateDeep
                 )
+                Spacer(Modifier.height(20.dp))
             }
+
+            // Capacity card
+            item { CapacityCard(dailyCap, onChange = { viewModel.setDailyCap(it) }) }
 
             item {
-                Text("Projects", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(4.dp))
+                Text("Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
-            // One card per project
+            // Project cards
             items(projects, key = { it.id }) { project ->
-                ProjectCard(
-                    project = project,
-                    onUpdate = { viewModel.updateProject(it) },
-                    onDelete = { viewModel.removeProject(project.id) }
-                )
+                ProjectCard(project = project, onDelete = { viewModel.removeProject(project.id) })
             }
 
+            // Add button — half-size after first project
             item {
-                OutlinedButton(
-                    onClick = { viewModel.addProject() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("+ Add project")
-                }
+                val hasProjects = projects.isNotEmpty()
+                AddProjectButton(compact = hasProjects, onClick = { showAddDialog = true })
+                Spacer(Modifier.height(8.dp))
             }
         }
     }
 }
 
+// ── Capacity Card (custom slider) ─────────────────────────────
+
 @Composable
-fun CapSlider(value: Double, onChange: (Double) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
+fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Daily hour capacity", fontWeight = FontWeight.Medium)
-                Text("${value.toInt()} hrs/day", color = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text("Daily Capacity", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text("Working hours per day", style = MaterialTheme.typography.bodySmall,
+                        color = SlateDeep)
+                }
+                // Big hour badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AccentBlue)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "${value.toInt()} hrs",
+                        color = White,
+                        fontFamily = InterFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
             }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Segmented dot track
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (h in 1..16) {
+                    val active = h <= value.toInt()
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(if (active) 10.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (active) AccentBlue else SlateMid)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
             Slider(
                 value = value.toFloat(),
                 onValueChange = { onChange(it.toDouble()) },
-                valueRange = 2f..16f,
-                steps = 13,
-                modifier = Modifier.fillMaxWidth()
+                valueRange = 1f..16f,
+                steps = 14,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = AccentBlue,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent
+                )
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("1h", style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                Text("16h", style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+            }
         }
     }
 }
 
+// ── Project Card ──────────────────────────────────────────────
+
 @Composable
-fun ProjectCard(
-    project: Project,
-    onUpdate: (Project) -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = project.name,
-                    onValueChange = { onUpdate(project.copy(name = it)) },
-                    label = { Text("Project name") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete project")
+fun ProjectCard(project: Project, onDelete: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(project.name, style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(project.clientName, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InfoChip("📅 ${project.deadlineDate.format(DATE_FMT)}")
+                    InfoChip("⏱ ${project.hoursNeeded.fmt()}h")
+                    InfoChip("₱${project.ratePerHour}/hr")
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(
-                    label = "Deadline (day)",
-                    value = project.deadlineDay.toString(),
-                    modifier = Modifier.weight(1f),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { d -> onUpdate(project.copy(deadlineDay = d.coerceIn(1, 30))) }
-                    }
-                )
-                NumberField(
-                    label = "Hours needed",
-                    value = project.hoursNeeded.toString(),
-                    modifier = Modifier.weight(1f),
-                    onValueChange = {
-                        it.toDoubleOrNull()?.let { h -> onUpdate(project.copy(hoursNeeded = h.coerceIn(0.5, 80.0))) }
-                    }
-                )
-                NumberField(
-                    label = "₱/hour",
-                    value = project.ratePerHour.toString(),
-                    modifier = Modifier.weight(1f),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { r -> onUpdate(project.copy(ratePerHour = r.coerceAtLeast(1))) }
-                    }
-                )
+            // X button
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Remove",
+                    tint = SlateDeep, modifier = Modifier.size(18.dp))
             }
         }
     }
 }
 
 @Composable
-fun NumberField(
+fun InfoChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(SlateMid)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.bodySmall, color = InkSoft)
+    }
+}
+
+// ── Add Project Button ────────────────────────────────────────
+
+@Composable
+fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
+    val height = if (compact) 52.dp else 108.dp
+
+    OutlinedCard(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .animateContentSize(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = White),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(if (compact) 26.dp else 40.dp)
+                        .clip(CircleShape)
+                        .background(AccentBlueSoft),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add project",
+                        tint = AccentBlue,
+                        modifier = Modifier.size(if (compact) 16.dp else 24.dp)
+                    )
+                }
+                if (!compact) {
+                    Spacer(Modifier.width(10.dp))
+                    Text("Add a project", style = MaterialTheme.typography.titleMedium,
+                        color = AccentBlue)
+                }
+            }
+        }
+    }
+}
+
+// ── Add Project Dialog ────────────────────────────────────────
+
+@Composable
+fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Int) -> Unit) {
+    var name     by remember { mutableStateOf("") }
+    var client   by remember { mutableStateOf("") }
+    var deadline by remember { mutableStateOf("") } // MM/dd/yyyy
+    var hours    by remember { mutableStateOf("") }
+    var rate     by remember { mutableStateOf("") }
+    var dateError by remember { mutableStateOf(false) }
+
+    fun tryConfirm() {
+        val parsedDate = try {
+            LocalDate.parse(deadline, DATE_INPUT_FMT).also { dateError = false }
+        } catch (e: DateTimeParseException) {
+            dateError = true; return
+        }
+        val h = hours.toDoubleOrNull() ?: return
+        val r = rate.toIntOrNull() ?: return
+        if (name.isBlank()) return
+        onConfirm(name.trim(), client.trim(), parsedDate, h, r)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = White),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("New Project", style = MaterialTheme.typography.titleLarge, color = Ink)
+
+                DialogField("Project name", name, onValueChange = { name = it })
+                DialogField("Client name", client, onValueChange = { client = it })
+                DialogField(
+                    label = "Deadline (MM/DD/YYYY)",
+                    value = deadline,
+                    onValueChange = { deadline = it; dateError = false },
+                    isError = dateError,
+                    errorMsg = "Use format MM/DD/YYYY e.g. 06/15/2025",
+                    keyboardType = KeyboardType.Number
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DialogField("Est. hours", hours,
+                        onValueChange = { hours = it },
+                        modifier = Modifier.weight(1f),
+                        keyboardType = KeyboardType.Decimal
+                    )
+                    DialogField("₱/hour", rate,
+                        onValueChange = { rate = it },
+                        modifier = Modifier.weight(1f),
+                        keyboardType = KeyboardType.Number
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)) {
+                        Text("Cancel", fontFamily = InterFamily)
+                    }
+                    Button(onClick = { tryConfirm() }, modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)) {
+                        Text("Add", fontFamily = InterFamily)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DialogField(
     label: String,
     value: String,
+    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onValueChange: (String) -> Unit
+    isError: Boolean = false,
+    errorMsg: String = "",
+    keyboardType: KeyboardType = KeyboardType.Text
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label, fontSize = 11.sp) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true,
-        modifier = modifier
-    )
+    Column(modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label, fontFamily = InterFamily, fontSize = 12.sp) },
+            isError = isError,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentBlue,
+                unfocusedBorderColor = SlateMid
+            )
+        )
+        if (isError) {
+            Text(errorMsg, color = AccentRed, fontSize = 11.sp,
+                fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+        }
+    }
 }
 
 // ── Results Screen ────────────────────────────────────────────
@@ -197,64 +414,79 @@ fun NumberField(
 @Composable
 fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
     Scaffold(
+        containerColor = White,
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("Schedule Results") },
+                title = {
+                    Text("Schedule Results", style = MaterialTheme.typography.titleMedium, color = Ink)
+                },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("← Back") }
-                }
+                    TextButton(onClick = onBack) {
+                        Text("← Back", color = AccentBlue, fontFamily = InterFamily)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = White)
             )
         }
     ) { padding ->
         LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(padding)
+            contentPadding = PaddingValues(
+                start = 20.dp, end = 20.dp,
+                top = padding.calculateTopPadding() + 8.dp, bottom = 24.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Summary metrics
-            item { SummaryCards(result) }
-
-            // Accepted projects grouped by day
+            // Metrics
             item {
-                Text("Day-by-day schedule", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            }
-
-            val byDay = result.accepted.groupBy { it.assignedDay }
-            items(byDay.keys.sorted()) { day ->
-                DayCard(day = day, items = byDay[day] ?: emptyList())
-            }
-
-            // Dropped projects
-            if (result.dropped.isNotEmpty()) {
-                item {
-                    Text("Dropped projects", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(4.dp))
-                    result.dropped.forEach { proj ->
-                        Text(
-                            "✗ ${proj.name} — deadline day ${proj.deadlineDay}, ${proj.hoursNeeded}h needed",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 13.sp
-                        )
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MetricCard("Total income", "₱${result.totalIncome.formatted()}",
+                        AccentBlueSoft, AccentBlue, Modifier.weight(1f))
+                    MetricCard("Accepted", "${result.accepted.size}", SlateCard, Ink,
+                        Modifier.weight(1f))
+                    MetricCard("Dropped", "${result.dropped.size}",
+                        if (result.dropped.isEmpty()) SlateCard else Color(0xFFFFE5E5),
+                        if (result.dropped.isEmpty()) Ink else AccentRed,
+                        Modifier.weight(1f))
                 }
             }
 
-            // Algorithm log
+            // Schedule header
             item {
-                Text("Algorithm trace", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        result.log.forEach { line ->
-                            val color = when {
-                                line.startsWith("  ✗") -> MaterialTheme.colorScheme.error
-                                line.startsWith("  Assign") -> MaterialTheme.colorScheme.primary
-                                line.startsWith("✓") -> MaterialTheme.colorScheme.tertiary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+
+            // Day cards
+            val byDate = result.accepted.groupBy { it.assignedDate }
+            items(byDate.keys.sorted()) { date ->
+                ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
+            }
+
+            // Dropped
+            if (result.dropped.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Dropped Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
+                }
+                items(result.dropped) { proj ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE5E5)),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("✗", color = AccentRed, fontSize = 16.sp,
+                                modifier = Modifier.padding(end = 10.dp))
+                            Column {
+                                Text(proj.name, style = MaterialTheme.typography.titleMedium,
+                                    color = Ink)
+                                Text("${proj.clientName} · due ${proj.deadlineDate.format(DATE_FMT)}",
+                                    style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                             }
-                            Text(line, fontSize = 11.sp, color = color)
                         }
                     }
                 }
@@ -264,50 +496,85 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
 }
 
 @Composable
-fun SummaryCards(result: ScheduleResult) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricCard("Total income",  "₱${result.totalIncome.formatted()}", Modifier.weight(1f))
-        MetricCard("Accepted",      "${result.accepted.size} projects",    Modifier.weight(1f))
-        MetricCard("Dropped",       "${result.dropped.size} projects",     Modifier.weight(1f))
-    }
-}
-
-@Composable
-fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(12.dp)) {
-            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(2.dp))
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modifier: Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = bg),
+        elevation = CardDefaults.cardElevation(0.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+            Spacer(Modifier.height(4.dp))
+            Text(value, fontFamily = InterFamily, fontWeight = FontWeight.Bold,
+                fontSize = 17.sp, color = valueColor)
         }
     }
 }
 
 @Composable
-fun DayCard(day: Int, items: List<ScheduledProject>) {
+fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
     val totalHours = items.sumOf { it.project.hoursNeeded }
     val totalIncome = items.sumOf { it.project.totalIncome }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            // Date header
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Day $day", fontWeight = FontWeight.Bold)
-                Text("${totalHours.fmt()}h · ₱${totalIncome.formatted()}", fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column {
+                    Text(
+                        date.format(DateTimeFormatter.ofPattern("EEEE")),
+                        style = MaterialTheme.typography.titleMedium, color = Ink
+                    )
+                    Text(
+                        date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
+                        style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("₱${totalIncome.formatted()}", fontFamily = InterFamily,
+                        fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentBlue)
+                    Text("${totalHours.fmt()}h total",
+                        style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                }
             }
-            Spacer(Modifier.height(6.dp))
+
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
+            Spacer(Modifier.height(10.dp))
+
+            // Project rows
             items.forEach { sp ->
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(White)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("• ${sp.project.name}", fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text("${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour}/hr",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(sp.project.name, style = MaterialTheme.typography.bodyLarge,
+                            color = Ink, fontWeight = FontWeight.Medium)
+                        Text(sp.project.clientName,
+                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("₱${sp.project.totalIncome.formatted()}",
+                            fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp, color = Ink)
+                        Text("${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour}/hr",
+                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                    }
                 }
+                Spacer(Modifier.height(6.dp))
             }
         }
     }
