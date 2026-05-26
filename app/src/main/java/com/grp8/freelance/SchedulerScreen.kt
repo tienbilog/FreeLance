@@ -1,5 +1,6 @@
 package com.grp8.freelance
 
+import android.app.DatePickerDialog
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -26,10 +28,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grp8.freelance.ui.theme.*
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
-val DATE_INPUT_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy")
 
 // ── Entry point ───────────────────────────────────────────────
 
@@ -310,17 +310,14 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
 fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Int) -> Unit) {
     var name     by remember { mutableStateOf("") }
     var client   by remember { mutableStateOf("") }
-    var deadline by remember { mutableStateOf("") } // MM/dd/yyyy
+    var deadline by remember { mutableStateOf<LocalDate?>(null) }
     var hours    by remember { mutableStateOf("") }
     var rate     by remember { mutableStateOf("") }
     var dateError by remember { mutableStateOf(false) }
 
     fun tryConfirm() {
-        val parsedDate = try {
-            LocalDate.parse(deadline, DATE_INPUT_FMT).also { dateError = false }
-        } catch (e: DateTimeParseException) {
-            dateError = true; return
-        }
+        val parsedDate = deadline ?: run { dateError = true; return }
+        dateError = false
         val h = hours.toDoubleOrNull() ?: return
         val r = rate.toIntOrNull() ?: return
         if (name.isBlank()) return
@@ -338,14 +335,40 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
 
                 DialogField("Project name", name, onValueChange = { name = it })
                 DialogField("Client name", client, onValueChange = { client = it })
-                DialogField(
-                    label = "Deadline (MM/DD/YYYY)",
-                    value = deadline,
-                    onValueChange = { deadline = it; dateError = false },
-                    isError = dateError,
-                    errorMsg = "Use format MM/DD/YYYY e.g. 06/15/2025",
-                    keyboardType = KeyboardType.Number
-                )
+
+                // ── Date Picker Button ──
+                val context = LocalContext.current
+                val today = LocalDate.now()
+                Column {
+                    OutlinedButton(
+                        onClick = {
+                            val d = deadline ?: today
+                            DatePickerDialog(
+                                context,
+                                { _, year, month, day ->
+                                    deadline = LocalDate.of(year, month + 1, day)
+                                    dateError = false
+                                },
+                                d.year, d.monthValue - 1, d.dayOfMonth
+                            ).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, if (dateError) AccentRed else SlateMid
+                        )
+                    ) {
+                        Text(
+                            text = deadline?.format(DATE_FMT) ?: "Select Deadline",
+                            fontFamily = InterFamily,
+                            color = if (deadline != null) Ink else SlateDeep
+                        )
+                    }
+                    if (dateError) {
+                        Text("Please select a deadline", color = AccentRed, fontSize = 11.sp,
+                            fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                    }
+                }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     DialogField("Est. hours", hours,
