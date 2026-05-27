@@ -8,7 +8,7 @@ data class Project(
     val clientName: String,
     val deadlineDate: LocalDate,
     val hoursNeeded: Double,
-    val ratePerHour: Double
+    val ratePerHour: Int
 ) {
     val totalIncome: Double get() = hoursNeeded * ratePerHour
 }
