@@ -232,7 +232,7 @@ fun ProjectCard(project: Project, onDelete: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip("📅 ${project.deadlineDate.format(DATE_FMT)}")
                     InfoChip("⏱ ${project.hoursNeeded.fmt()}h")
-                    InfoChip("₱${project.ratePerHour}/hr")
+                    InfoChip("₱${project.ratePerHour.fmt()}/hr")
                 }
             }
             // X button
@@ -307,21 +307,26 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
 // ── Add Project Dialog ────────────────────────────────────────
 
 @Composable
-fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Int) -> Unit) {
+fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Double) -> Unit) {
     var name     by remember { mutableStateOf("") }
     var client   by remember { mutableStateOf("") }
     var deadline by remember { mutableStateOf<LocalDate?>(null) }
     var hours    by remember { mutableStateOf("") }
     var rate     by remember { mutableStateOf("") }
-    var dateError by remember { mutableStateOf(false) }
+    var nameError   by remember { mutableStateOf(false) }
+    var clientError by remember { mutableStateOf(false) }
+    var dateError  by remember { mutableStateOf(false) }
+    var hoursError by remember { mutableStateOf(false) }
+    var rateError  by remember { mutableStateOf(false) }
 
     fun tryConfirm() {
-        val parsedDate = deadline ?: run { dateError = true; return }
-        dateError = false
-        val h = hours.toDoubleOrNull() ?: return
-        val r = rate.toIntOrNull() ?: return
-        if (name.isBlank()) return
-        onConfirm(name.trim(), client.trim(), parsedDate, h, r)
+        nameError   = name.isBlank()
+        clientError = client.isBlank()
+        dateError   = deadline == null
+        hoursError = hours.isBlank() || hours.toDoubleOrNull() == null || hours.toDouble() <= 0
+        rateError  = rate.isBlank() || rate.toDoubleOrNull() == null || rate.toDouble() <= 0
+        if (nameError || clientError || dateError || hoursError || rateError) return
+        onConfirm(name.trim(), client.trim(), deadline!!, hours.toDouble(), rate.toDouble())
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -333,8 +338,16 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("New Project", style = MaterialTheme.typography.titleLarge, color = Ink)
 
-                DialogField("Project name", name, onValueChange = { name = it })
-                DialogField("Client name", client, onValueChange = { client = it })
+                DialogField("Project name", name,
+                    onValueChange = { name = it; nameError = false },
+                    isError = nameError,
+                    errorMsg = "Project name is required"
+                )
+                DialogField("Client name", client,
+                    onValueChange = { client = it; clientError = false },
+                    isError = clientError,
+                    errorMsg = "Client name is required"
+                )
 
                 // ── Date Picker Button ──
                 val context = LocalContext.current
@@ -372,14 +385,18 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     DialogField("Est. hours", hours,
-                        onValueChange = { hours = it },
+                        onValueChange = { hours = it; hoursError = false },
                         modifier = Modifier.weight(1f),
-                        keyboardType = KeyboardType.Decimal
+                        keyboardType = KeyboardType.Decimal,
+                        isError = hoursError,
+                        errorMsg = if (hours.isBlank()) "Required" else "Numbers only"
                     )
                     DialogField("₱/hour", rate,
-                        onValueChange = { rate = it },
+                        onValueChange = { rate = it; rateError = false },
                         modifier = Modifier.weight(1f),
-                        keyboardType = KeyboardType.Number
+                        keyboardType = KeyboardType.Decimal,
+                        isError = rateError,
+                        errorMsg = if (rate.isBlank()) "Required" else "Numbers only"
                     )
                 }
 
@@ -463,7 +480,7 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
             // Metrics
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricCard("Total income", "₱${result.totalIncome.formatted()}",
+                    MetricCard("Total income", "₱${result.totalIncome.fmt()}",
                         AccentBlueSoft, AccentBlue, Modifier.weight(1f))
                     MetricCard("Accepted", "${result.accepted.size}", SlateCard, Ink,
                         Modifier.weight(1f))
@@ -561,7 +578,7 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("₱${totalIncome.formatted()}", fontFamily = InterFamily,
+                    Text("₱${totalIncome.fmt()}", fontFamily = InterFamily,
                         fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentBlue)
                     Text("${totalHours.fmt()}h total",
                         style = MaterialTheme.typography.bodySmall, color = SlateDeep)
@@ -590,7 +607,7 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
                             style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("₱${sp.project.totalIncome.formatted()}",
+                        Text("₱${sp.project.totalIncome.fmt()}",
                             fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp, color = Ink)
                         Text("${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour}/hr",

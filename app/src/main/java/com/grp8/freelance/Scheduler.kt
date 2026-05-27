@@ -6,7 +6,7 @@ import java.time.temporal.ChronoUnit
 object Scheduler {
 
     fun schedule(projects: List<Project>, dailyCapHours: Double): ScheduleResult {
-        if (projects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0)
+        if (projects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val sorted = projects.sortedBy { it.deadlineDate }
@@ -18,10 +18,10 @@ object Scheduler {
         var d = today
         repeat(totalDays) { dayHours[d] = dailyCapHours; d = d.plusDays(1) }
 
-        var bestIncome = -1
+        var bestIncome = -1.0
         var bestAssignment = mutableMapOf<Int, LocalDate?>()
 
-        fun backtrack(index: Int, assignment: MutableMap<Int, LocalDate?>, income: Int) {
+        fun backtrack(index: Int, assignment: MutableMap<Int, LocalDate?>, income: Double) {
             if (index == sorted.size) {
                 if (income > bestIncome) {
                     bestIncome = income
@@ -50,7 +50,7 @@ object Scheduler {
             backtrack(index + 1, assignment, income)
         }
 
-        backtrack(0, mutableMapOf(), 0)
+        backtrack(0, mutableMapOf(), 0.0)
 
         val accepted = mutableListOf<ScheduledProject>()
         val dropped = mutableListOf<Project>()
@@ -60,7 +60,7 @@ object Scheduler {
             else dropped.add(proj)
         }
         accepted.sortBy { it.assignedDate }
-        return ScheduleResult(accepted, dropped, bestIncome.coerceAtLeast(0))
+        return ScheduleResult(accepted, dropped, bestIncome.coerceAtLeast(0.0))
     }
 }
 

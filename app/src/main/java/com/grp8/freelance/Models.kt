@@ -8,9 +8,9 @@ data class Project(
     val clientName: String,
     val deadlineDate: LocalDate,
     val hoursNeeded: Double,
-    val ratePerHour: Int
+    val ratePerHour: Double
 ) {
-    val totalIncome: Int get() = (hoursNeeded * ratePerHour).toInt()
+    val totalIncome: Double get() = hoursNeeded * ratePerHour
 }
 
 data class ScheduledProject(
@@ -21,5 +21,5 @@ data class ScheduledProject(
 data class ScheduleResult(
     val accepted: List<ScheduledProject>,
     val dropped: List<Project>,
-    val totalIncome: Int
+    val totalIncome: Double
 )
