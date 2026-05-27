@@ -15,11 +15,23 @@ data class Project(
 
 data class ScheduledProject(
     val project: Project,
-    val assignedDate: LocalDate
+    val assignedDate: LocalDate,
+    var isCompleted: Boolean = false
+)
+
+enum class DropReason {
+    NO_CAPACITY,
+    PAST_DEADLINE
+}
+
+data class DroppedProject(
+    val project: Project,
+    val reason: DropReason,
+    val explanation: String
 )
 
 data class ScheduleResult(
     val accepted: List<ScheduledProject>,
-    val dropped: List<Project>,
+    val dropped: List<DroppedProject>,       // ← was List<Project>, now List<DroppedProject>
     val totalIncome: Double
 )
