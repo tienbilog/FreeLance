@@ -18,8 +18,13 @@ data class ScheduledProject(
     val assignedDate: LocalDate
 )
 
+data class DroppedProject(
+    val project: Project,
+    val reason: String
+)
+
 data class ScheduleResult(
     val accepted: List<ScheduledProject>,
-    val dropped: List<Project>,
+    val dropped: List<DroppedProject>,
     val totalIncome: Double
 )
