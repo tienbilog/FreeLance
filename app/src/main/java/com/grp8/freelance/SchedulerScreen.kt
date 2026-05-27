@@ -75,12 +75,8 @@ fun InputScreen(viewModel: SchedulerViewModel) {
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
                 ) {
-                    Text(
-                        "Run Scheduler",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFamily
-                    )
+                    Text("Run Scheduler", fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        fontFamily = InterFamily)
                 }
             }
         }
@@ -108,6 +104,7 @@ fun InputScreen(viewModel: SchedulerViewModel) {
                 Spacer(Modifier.height(20.dp))
             }
 
+            // Capacity card
             item { CapacityCard(dailyCap, onChange = { viewModel.setDailyCap(it) }) }
 
             item {
@@ -115,13 +112,12 @@ fun InputScreen(viewModel: SchedulerViewModel) {
                 Text("Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
+            // Project cards
             items(projects, key = { it.id }) { project ->
-                ProjectCard(
-                    project = project,
-                    onDelete = { viewModel.removeProject(project.id) }
-                )
+                ProjectCard(project = project, onDelete = { viewModel.removeProject(project.id) })
             }
 
+            // Add button — half-size after first project
             item {
                 val hasProjects = projects.isNotEmpty()
                 AddProjectButton(compact = hasProjects, onClick = { showAddDialog = true })
@@ -131,7 +127,7 @@ fun InputScreen(viewModel: SchedulerViewModel) {
     }
 }
 
-// ── Capacity Card ─────────────────────────────────────────────
+// ── Capacity Card (custom slider) ─────────────────────────────
 
 @Composable
 fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
@@ -148,17 +144,11 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
-                    Text(
-                        "Daily Capacity",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Ink
-                    )
-                    Text(
-                        "Working hours per day",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SlateDeep
-                    )
+                    Text("Daily Capacity", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text("Working hours per day", style = MaterialTheme.typography.bodySmall,
+                        color = SlateDeep)
                 }
+                // Big hour badge
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -177,6 +167,7 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
 
             Spacer(Modifier.height(14.dp))
 
+            // Segmented dot track
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -235,16 +226,8 @@ fun ProjectCard(project: Project, onDelete: () -> Unit) {
             verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    project.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Ink
-                )
-                Text(
-                    project.clientName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SlateDeep
-                )
+                Text(project.name, style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(project.clientName, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip("📅 ${project.deadlineDate.format(DATE_FMT)}")
@@ -252,16 +235,13 @@ fun ProjectCard(project: Project, onDelete: () -> Unit) {
                     InfoChip("₱${project.ratePerHour.fmt()}/hr")
                 }
             }
+            // X button
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(28.dp)
             ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Remove",
-                    tint = SlateDeep,
-                    modifier = Modifier.size(18.dp)
-                )
+                Icon(Icons.Default.Close, contentDescription = "Remove",
+                    tint = SlateDeep, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -316,11 +296,8 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
                 }
                 if (!compact) {
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        "Add a project",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = AccentBlue
-                    )
+                    Text("Add a project", style = MaterialTheme.typography.titleMedium,
+                        color = AccentBlue)
                 }
             }
         }
@@ -330,27 +307,24 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
 // ── Add Project Dialog ────────────────────────────────────────
 
 @Composable
-fun AddProjectDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, LocalDate, Double, Double) -> Unit
-) {
-    var name        by remember { mutableStateOf("") }
-    var client      by remember { mutableStateOf("") }
-    var deadline    by remember { mutableStateOf<LocalDate?>(null) }
-    var hours       by remember { mutableStateOf("") }
-    var rate        by remember { mutableStateOf("") }
+fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Double) -> Unit) {
+    var name     by remember { mutableStateOf("") }
+    var client   by remember { mutableStateOf("") }
+    var deadline by remember { mutableStateOf<LocalDate?>(null) }
+    var hours    by remember { mutableStateOf("") }
+    var rate     by remember { mutableStateOf("") }
     var nameError   by remember { mutableStateOf(false) }
     var clientError by remember { mutableStateOf(false) }
-    var dateError   by remember { mutableStateOf(false) }
-    var hoursError  by remember { mutableStateOf(false) }
-    var rateError   by remember { mutableStateOf(false) }
+    var dateError  by remember { mutableStateOf(false) }
+    var hoursError by remember { mutableStateOf(false) }
+    var rateError  by remember { mutableStateOf(false) }
 
     fun tryConfirm() {
         nameError   = name.isBlank()
         clientError = client.isBlank()
         dateError   = deadline == null
-        hoursError  = hours.isBlank() || hours.toDoubleOrNull() == null || hours.toDouble() <= 0
-        rateError   = rate.isBlank()  || rate.toDoubleOrNull()  == null || rate.toDouble()  <= 0
+        hoursError = hours.isBlank() || hours.toDoubleOrNull() == null || hours.toDouble() <= 0
+        rateError  = rate.isBlank() || rate.toDoubleOrNull() == null || rate.toDouble() <= 0
         if (nameError || clientError || dateError || hoursError || rateError) return
         onConfirm(name.trim(), client.trim(), deadline!!, hours.toDouble(), rate.toDouble())
     }
@@ -361,30 +335,23 @@ fun AddProjectDialog(
             colors = CardDefaults.cardColors(containerColor = White),
             elevation = CardDefaults.cardElevation(8.dp)
         ) {
-            Column(
-                Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("New Project", style = MaterialTheme.typography.titleLarge, color = Ink)
 
-                DialogField(
-                    label = "Project name",
-                    value = name,
+                DialogField("Project name", name,
                     onValueChange = { name = it; nameError = false },
                     isError = nameError,
                     errorMsg = "Project name is required"
                 )
-                DialogField(
-                    label = "Client name",
-                    value = client,
+                DialogField("Client name", client,
                     onValueChange = { client = it; clientError = false },
                     isError = clientError,
                     errorMsg = "Client name is required"
                 )
 
-                // Date picker
+                // ── Date Picker Button ──
                 val context = LocalContext.current
-                val today   = LocalDate.now()
+                val today = LocalDate.now()
                 Column {
                     OutlinedButton(
                         onClick = {
@@ -392,7 +359,7 @@ fun AddProjectDialog(
                             DatePickerDialog(
                                 context,
                                 { _, year, month, day ->
-                                    deadline  = LocalDate.of(year, month + 1, day)
+                                    deadline = LocalDate.of(year, month + 1, day)
                                     dateError = false
                                 },
                                 d.year, d.monthValue - 1, d.dayOfMonth
@@ -411,29 +378,20 @@ fun AddProjectDialog(
                         )
                     }
                     if (dateError) {
-                        Text(
-                            "Please select a deadline",
-                            color = AccentRed,
-                            fontSize = 11.sp,
-                            fontFamily = InterFamily,
-                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                        )
+                        Text("Please select a deadline", color = AccentRed, fontSize = 11.sp,
+                            fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
                     }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DialogField(
-                        label = "Est. hours",
-                        value = hours,
+                    DialogField("Est. hours", hours,
                         onValueChange = { hours = it; hoursError = false },
                         modifier = Modifier.weight(1f),
                         keyboardType = KeyboardType.Decimal,
                         isError = hoursError,
                         errorMsg = if (hours.isBlank()) "Required" else "Numbers only"
                     )
-                    DialogField(
-                        label = "₱/hour",
-                        value = rate,
+                    DialogField("₱/hour", rate,
                         onValueChange = { rate = it; rateError = false },
                         modifier = Modifier.weight(1f),
                         keyboardType = KeyboardType.Decimal,
@@ -444,19 +402,13 @@ fun AddProjectDialog(
 
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)) {
                         Text("Cancel", fontFamily = InterFamily)
                     }
-                    Button(
-                        onClick = { tryConfirm() },
-                        modifier = Modifier.weight(1f),
+                    Button(onClick = { tryConfirm() }, modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
-                    ) {
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)) {
                         Text("Add", fontFamily = InterFamily)
                     }
                 }
@@ -491,13 +443,8 @@ fun DialogField(
             )
         )
         if (isError) {
-            Text(
-                errorMsg,
-                color = AccentRed,
-                fontSize = 11.sp,
-                fontFamily = InterFamily,
-                modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-            )
+            Text(errorMsg, color = AccentRed, fontSize = 11.sp,
+                fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
         }
     }
 }
@@ -505,23 +452,14 @@ fun DialogField(
 // ── Results Screen ────────────────────────────────────────────
 
 @Composable
-fun ResultsScreen(
-    result: ScheduleResult,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
     Scaffold(
-        modifier = modifier,
         containerColor = White,
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
                 title = {
-                    Text(
-                        "Schedule Results",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Ink
-                    )
+                    Text("Schedule Results", style = MaterialTheme.typography.titleMedium, color = Ink)
                 },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
@@ -535,102 +473,59 @@ fun ResultsScreen(
         LazyColumn(
             contentPadding = PaddingValues(
                 start = 20.dp, end = 20.dp,
-                top = padding.calculateTopPadding() + 8.dp,
-                bottom = padding.calculateBottomPadding() + 24.dp
+                top = padding.calculateTopPadding() + 8.dp, bottom = 24.dp
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Metrics row
+            // Metrics
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricCard(
-                        label      = "Total income",
-                        value      = "₱${result.totalIncome.fmt()}",
-                        bg         = AccentBlueSoft,
-                        valueColor = AccentBlue,
-                        modifier   = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        label      = "Accepted",
-                        value      = "${result.accepted.size}",
-                        bg         = SlateCard,
-                        valueColor = Ink,
-                        modifier   = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        label      = "Dropped",
-                        value      = "${result.dropped.size}",
-                        bg         = if (result.dropped.isEmpty()) SlateCard else Color(0xFFFFE5E5),
-                        valueColor = if (result.dropped.isEmpty()) Ink else AccentRed,
-                        modifier   = Modifier.weight(1f)
-                    )
+                    MetricCard("Total income", "₱${result.totalIncome.fmt()}",
+                        AccentBlueSoft, AccentBlue, Modifier.weight(1f))
+                    MetricCard("Accepted", "${result.accepted.size}", SlateCard, Ink,
+                        Modifier.weight(1f))
+                    MetricCard("Dropped", "${result.dropped.size}",
+                        if (result.dropped.isEmpty()) SlateCard else Color(0xFFFFE5E5),
+                        if (result.dropped.isEmpty()) Ink else AccentRed,
+                        Modifier.weight(1f))
                 }
             }
 
-            // Schedule section
+            // Schedule header
             item {
                 Text("Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
+            // Day cards
             val byDate = result.accepted.groupBy { it.assignedDate }
             items(byDate.keys.sorted()) { date ->
                 ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
             }
 
-            // Dropped section
+            // Dropped
             if (result.dropped.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Dropped Projects",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Ink
-                    )
+                    Text("Dropped Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
                 }
-                items(result.dropped) { dropped ->
+                items(result.dropped) { proj ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape    = RoundedCornerShape(14.dp),
-                        colors   = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFE5E5)
-                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE5E5)),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "✗ ",
-                                    color = AccentRed,
-                                    fontSize = 16.sp
-                                )
-                                Column {
-                                    Text(
-                                        dropped.project.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = Ink
-                                    )
-                                    Text(
-                                        "${dropped.project.clientName} · due ${dropped.project.deadlineDate.format(DATE_FMT)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = SlateDeep
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            // Explanation box
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFFFCDD2))
-                                    .padding(10.dp)
-                            ) {
-                                Text(
-                                    dropped.explanation,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF8B0000),
-                                    lineHeight = 18.sp
-                                )
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("✗", color = AccentRed, fontSize = 16.sp,
+                                modifier = Modifier.padding(end = 10.dp))
+                            Column {
+                                Text(proj.name, style = MaterialTheme.typography.titleMedium,
+                                    color = Ink)
+                                Text("${proj.clientName} · due ${proj.deadlineDate.format(DATE_FMT)}",
+                                    style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                             }
                         }
                     }
@@ -640,50 +535,33 @@ fun ResultsScreen(
     }
 }
 
-// ── Metric Card ───────────────────────────────────────────────
-
 @Composable
-fun MetricCard(
-    label: String,
-    value: String,
-    bg: Color,
-    valueColor: Color,
-    modifier: Modifier
-) {
-    Card(
-        modifier  = modifier,
-        shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(containerColor = bg),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
+fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modifier: Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = bg),
+        elevation = CardDefaults.cardElevation(0.dp)) {
         Column(Modifier.padding(14.dp)) {
             Text(label, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
             Spacer(Modifier.height(4.dp))
-            Text(
-                value,
-                fontFamily = InterFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 17.sp,
-                color      = valueColor
-            )
+            Text(value, fontFamily = InterFamily, fontWeight = FontWeight.Bold,
+                fontSize = 17.sp, color = valueColor)
         }
     }
 }
 
-// ── Schedule Day Card ─────────────────────────────────────────
-
 @Composable
 fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
-    val totalHours  = items.sumOf { it.project.hoursNeeded }
+    val totalHours = items.sumOf { it.project.hoursNeeded }
     val totalIncome = items.sumOf { it.project.totalIncome }
 
     Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = SlateCard),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
+            // Date header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -692,28 +570,18 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
                 Column {
                     Text(
                         date.format(DateTimeFormatter.ofPattern("EEEE")),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Ink
+                        style = MaterialTheme.typography.titleMedium, color = Ink
                     )
                     Text(
                         date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SlateDeep
+                        style = MaterialTheme.typography.bodySmall, color = SlateDeep
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "₱${totalIncome.fmt()}",
-                        fontFamily = InterFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 15.sp,
-                        color      = AccentBlue
-                    )
-                    Text(
-                        "${totalHours.fmt()}h total",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SlateDeep
-                    )
+                    Text("₱${totalIncome.fmt()}", fontFamily = InterFamily,
+                        fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentBlue)
+                    Text("${totalHours.fmt()}h total",
+                        style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                 }
             }
 
@@ -721,6 +589,7 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
             HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
+            // Project rows
             items.forEach { sp ->
                 Row(
                     modifier = Modifier
@@ -732,31 +601,17 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            sp.project.name,
-                            style      = MaterialTheme.typography.bodyLarge,
-                            color      = Ink,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            sp.project.clientName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = SlateDeep
-                        )
+                        Text(sp.project.name, style = MaterialTheme.typography.bodyLarge,
+                            color = Ink, fontWeight = FontWeight.Medium)
+                        Text(sp.project.clientName,
+                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "₱${sp.project.totalIncome.fmt()}",
-                            fontFamily = InterFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize   = 13.sp,
-                            color      = Ink
-                        )
-                        Text(
-                            "${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour.fmt()}/hr",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = SlateDeep
-                        )
+                        Text("₱${sp.project.totalIncome.fmt()}",
+                            fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp, color = Ink)
+                        Text("${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour}/hr",
+                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                     }
                 }
                 Spacer(Modifier.height(6.dp))

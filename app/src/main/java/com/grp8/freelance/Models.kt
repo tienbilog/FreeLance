@@ -8,30 +8,18 @@ data class Project(
     val clientName: String,
     val deadlineDate: LocalDate,
     val hoursNeeded: Double,
-    val ratePerHour: Int
+    val ratePerHour: Double
 ) {
     val totalIncome: Double get() = hoursNeeded * ratePerHour
 }
 
 data class ScheduledProject(
     val project: Project,
-    val assignedDate: LocalDate,
-    var isCompleted: Boolean = false
-)
-
-enum class DropReason {
-    NO_CAPACITY,
-    PAST_DEADLINE
-}
-
-data class DroppedProject(
-    val project: Project,
-    val reason: DropReason,
-    val explanation: String
+    val assignedDate: LocalDate
 )
 
 data class ScheduleResult(
     val accepted: List<ScheduledProject>,
-    val dropped: List<DroppedProject>,       // ← was List<Project>, now List<DroppedProject>
+    val dropped: List<Project>,
     val totalIncome: Double
 )
