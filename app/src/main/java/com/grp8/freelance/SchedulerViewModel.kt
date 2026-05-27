@@ -22,6 +22,10 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _result = MutableStateFlow<ScheduleResult?>(null)
     val result: StateFlow<ScheduleResult?> = _result.asStateFlow()
 
+    // Checkbox state: key = "{projectId}_{date}", value = checked
+    private val _completions = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val completions: StateFlow<Map<String, Boolean>> = _completions.asStateFlow()
+
     private var idCtr = 1
 
     init {
@@ -34,11 +38,15 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun addProject(name: String, clientName: String, deadline: LocalDate, hours: Double, rate: Double) {
-        _projects.value += Project(idCtr++, name, clientName, deadline, hours, rate)
+        val updated = _projects.value + Project(idCtr++, name, clientName, deadline, hours, rate)
+        _projects.value = updated
+        viewModelScope.launch { repository.save(updated) }
     }
+
     fun removeProject(id: Int) {
-        _projects.value = _projects.value.filter { it.id != id }
-        viewModelScope.launch { repository.save(_projects.value) }
+        val updated = _projects.value.filter { it.id != id }
+        _projects.value = updated
+        viewModelScope.launch { repository.save(updated) }
     }
 
     fun setDailyCap(hours: Double) {
@@ -51,5 +59,15 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clearResult() {
         _result.value = null
+    }
+
+    fun toggleCompletion(projectId: Int, date: LocalDate) {
+        val key     = "${projectId}_${date}"
+        val current = _completions.value[key] ?: false
+        _completions.value = _completions.value + (key to !current)
+    }
+
+    fun isCompleted(projectId: Int, date: LocalDate): Boolean {
+        return _completions.value["${projectId}_${date}"] ?: false
     }
 }
