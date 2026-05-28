@@ -12,7 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit          // ← NEW
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,21 +32,17 @@ import java.time.format.DateTimeFormatter
 
 val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
 
-// ── Entry point ───────────────────────────────────────────────
-
 @Composable
 fun SchedulerApp(viewModel: SchedulerViewModel) {
     val result by viewModel.result.collectAsStateWithLifecycle()
 
-    // Project the user wants to edit, lifted here so ResultsScreen can hand
-    // one back to InputScreen before clearing the result.
-    var projectToEdit by remember { mutableStateOf<Project?>(null) }   // ← NEW
+    var projectToEdit by remember { mutableStateOf<Project?>(null) }
 
     if (result != null) {
         ResultsScreen(
             result = result!!,
             onBack = { viewModel.clearResult() },
-            onEditProject = { project ->                               // ← NEW
+            onEditProject = { project ->
                 viewModel.clearResult()
                 projectToEdit = project
             }
@@ -54,27 +50,23 @@ fun SchedulerApp(viewModel: SchedulerViewModel) {
     } else {
         InputScreen(
             viewModel = viewModel,
-            initialEditProject = projectToEdit,                        // ← NEW
-            onEditHandled = { projectToEdit = null }                   // ← NEW
+            initialEditProject = projectToEdit,
+            onEditHandled = { projectToEdit = null }
         )
     }
 }
 
-// ── Input Screen ──────────────────────────────────────────────
-
 @Composable
 fun InputScreen(
     viewModel: SchedulerViewModel,
-    initialEditProject: Project? = null,   // ← NEW
-    onEditHandled: () -> Unit = {}         // ← NEW
+    initialEditProject: Project? = null,
+    onEditHandled: () -> Unit = {}
 ) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     val dailyCap by viewModel.dailyCap.collectAsStateWithLifecycle()
     var showAddDialog  by remember { mutableStateOf(false) }
-    var editingProject by remember { mutableStateOf<Project?>(null) }  // ← NEW
+    var editingProject by remember { mutableStateOf<Project?>(null) }
 
-    // When the user arrives here from ResultsScreen via the Edit button,
-    // open the edit dialog immediately.                                 // ← NEW
     LaunchedEffect(initialEditProject) {
         if (initialEditProject != null) {
             editingProject = initialEditProject
@@ -92,7 +84,6 @@ fun InputScreen(
         )
     }
 
-    // ── Edit dialog ──────────────────────────────────────────────────── NEW
     editingProject?.let { proj ->
         EditProjectDialog(
             project = proj,
@@ -103,7 +94,6 @@ fun InputScreen(
             }
         )
     }
-    // ────────────────────────────────────────────────────────────────────────
 
     Scaffold(
         containerColor = White,
@@ -148,7 +138,6 @@ fun InputScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            // Capacity card
             item { CapacityCard(dailyCap, onChange = { viewModel.setDailyCap(it) }) }
 
             item {
@@ -156,16 +145,14 @@ fun InputScreen(
                 Text("Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
-            // Project cards – now receive onEdit as well               // ← CHANGED
             items(projects, key = { it.id }) { project ->
                 ProjectCard(
                     project  = project,
                     onDelete = { viewModel.removeProject(project.id) },
-                    onEdit   = { editingProject = project }             // ← NEW
+                    onEdit   = { editingProject = project }
                 )
             }
 
-            // Add button — half-size after first project
             item {
                 val hasProjects = projects.isNotEmpty()
                 AddProjectButton(compact = hasProjects, onClick = { showAddDialog = true })
@@ -174,8 +161,6 @@ fun InputScreen(
         }
     }
 }
-
-// ── Capacity Card (custom slider) ─────────────────────────────
 
 @Composable
 fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
@@ -257,13 +242,11 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
     }
 }
 
-// ── Project Card ──────────────────────────────────────────────
-
 @Composable
 fun ProjectCard(
     project: Project,
     onDelete: () -> Unit,
-    onEdit: () -> Unit            // ← NEW
+    onEdit: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -285,7 +268,6 @@ fun ProjectCard(
                     InfoChip("₱${project.ratePerHour.fmt()}/hr")
                 }
             }
-            // ── Edit + Delete buttons ─────────────────────────── NEW
             Row {
                 IconButton(
                     onClick = onEdit,
@@ -311,7 +293,6 @@ fun ProjectCard(
                     )
                 }
             }
-            // ────────────────────────────────────────────────────────
         }
     }
 }
@@ -327,8 +308,6 @@ fun InfoChip(text: String) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = InkSoft)
     }
 }
-
-// ── Add Project Button ────────────────────────────────────────
 
 @Composable
 fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
@@ -373,8 +352,6 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── Add Project Dialog ────────────────────────────────────────
-
 @Composable
 fun AddProjectDialog(
     onDismiss: () -> Unit,
@@ -387,8 +364,6 @@ fun AddProjectDialog(
         onConfirm = onConfirm
     )
 }
-
-// ── Edit Project Dialog ───────────────────────────────────────  NEW
 
 @Composable
 fun EditProjectDialog(
@@ -408,8 +383,6 @@ fun EditProjectDialog(
         onConfirm = onConfirm
     )
 }
-
-// ── Shared form used by both Add and Edit dialogs ─────────────  NEW
 
 @Composable
 private fun ProjectFormDialog(
@@ -571,13 +544,11 @@ fun DialogField(
     }
 }
 
-// ── Results Screen ────────────────────────────────────────────
-
 @Composable
 fun ResultsScreen(
     result: ScheduleResult,
     onBack: () -> Unit,
-    onEditProject: (Project) -> Unit   // ← NEW
+    onEditProject: (Project) -> Unit
 ) {
     Scaffold(
         containerColor = White,
@@ -604,7 +575,6 @@ fun ResultsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Metrics
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     MetricCard("Total income", "₱${result.totalIncome.fmt()}",
@@ -657,7 +627,6 @@ fun ResultsScreen(
                                 Text(dropped.reason,
                                     style = MaterialTheme.typography.bodySmall, color = AccentRed)
 
-                                // ── Edit button ──────────────────────────────  NEW
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
                                     onClick = { onEditProject(dropped.project) },
@@ -685,7 +654,6 @@ fun ResultsScreen(
                                         fontSize = 12.sp
                                     )
                                 }
-                                // ─────────────────────────────────────────────
                             }
                         }
                     }

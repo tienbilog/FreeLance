@@ -29,7 +29,6 @@ class ProjectRepository(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[KEY] = json }
     }
 
-    // Gson can't serialize LocalDate, so we use a simple bridge data class
     private data class ProjectJson(
         val id: Int,
         val name: String,

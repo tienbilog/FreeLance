@@ -43,7 +43,6 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch { repository.save(_projects.value) }
     }
 
-    // ── NEW ──────────────────────────────────────────────────────────────────
     fun updateProject(
         id: Int,
         name: String,
@@ -63,7 +62,6 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch { repository.save(_projects.value) }
     }
-    // ─────────────────────────────────────────────────────────────────────────
 
     fun setDailyCap(hours: Double) {
         _dailyCap.value = hours.coerceIn(1.0, 16.0)

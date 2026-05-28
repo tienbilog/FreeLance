@@ -16,7 +16,6 @@ object Scheduler {
         val lastDate = sorted.maxOf { it.deadlineDate }
         val totalDays = ChronoUnit.DAYS.between(today, lastDate).toInt() + 1
 
-        // Build available hours per day
         val dayHours = mutableMapOf<LocalDate, Double>()
         var d = today
         repeat(totalDays) {
@@ -56,7 +55,6 @@ object Scheduler {
 
         backtrack(0, mutableMapOf(), 0.0)
 
-        // Rebuild finalDayHours reflecting the best assignment
         val finalDayHours = mutableMapOf<LocalDate, Double>()
         var fd = today
         repeat(totalDays) {
@@ -85,16 +83,6 @@ object Scheduler {
         return ScheduleResult(accepted, dropped, bestIncome.coerceAtLeast(0.0))
     }
 
-    /**
-     * Builds a specific, actionable rejection message based on why
-     * the backtracking could not (or chose not to) schedule the project.
-     *
-     * Three cases mirror what the algorithm actually checks:
-     *  1. hoursNeeded > dailyCap  →  physically impossible in a single day
-     *  2. deadline already passed →  no valid days to even try
-     *  3. no remaining slot fits  →  earlier-deadline projects claimed all capacity;
-     *                                find the soonest free slot and suggest it
-     */
     private fun buildRejectionReason(
         proj: Project,
         today: LocalDate,
