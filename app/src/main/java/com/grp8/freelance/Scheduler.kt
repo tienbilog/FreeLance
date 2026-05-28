@@ -1,7 +1,10 @@
 package com.grp8.freelance
 
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+
+private val REASON_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MMM d")
 
 object Scheduler {
 
@@ -13,17 +16,11 @@ object Scheduler {
         val lastDate = sorted.maxOf { it.deadlineDate }
         val totalDays = ChronoUnit.DAYS.between(today, lastDate).toInt() + 1
 
+        // Build available hours per day
         val dayHours = mutableMapOf<LocalDate, Double>()
         var d = today
         repeat(totalDays) {
-            if (d == today) {
-                val now = java.time.LocalTime.now()
-                val secondsLeft = (24 * 3600) - (now.hour * 3600 + now.minute * 60 + now.second)
-                val fractionLeft = secondsLeft / (24.0 * 3600)
-                dayHours[d] = (dailyCapHours * fractionLeft).coerceAtLeast(0.0)
-            } else {
-                dayHours[d] = dailyCapHours
-            }
+            dayHours[d] = if (d == today) todayRemainingHours(dailyCapHours) else dailyCapHours
             d = d.plusDays(1)
         }
 
@@ -40,7 +37,6 @@ object Scheduler {
             }
             val proj = sorted[index]
 
-            // Try placing the project on every valid day up to its deadline
             var day = today
             while (!day.isAfter(proj.deadlineDate)) {
                 val avail = dayHours[day] ?: 0.0
@@ -48,22 +44,25 @@ object Scheduler {
                     dayHours[day] = avail - proj.hoursNeeded
                     assignment[index] = day
                     backtrack(index + 1, assignment, income + proj.totalIncome)
-                    dayHours[day] = avail          // restore hours
-                    assignment[index] = null       // restore assignment
+                    dayHours[day] = avail
+                    assignment[index] = null
                 }
                 day = day.plusDays(1)
             }
 
-            // Also try skipping this project entirely
             assignment[index] = null
             backtrack(index + 1, assignment, income)
         }
 
         backtrack(0, mutableMapOf(), 0.0)
 
+        // Rebuild finalDayHours reflecting the best assignment
         val finalDayHours = mutableMapOf<LocalDate, Double>()
         var fd = today
-        repeat(totalDays) { finalDayHours[fd] = dailyCapHours; fd = fd.plusDays(1) }
+        repeat(totalDays) {
+            finalDayHours[fd] = if (fd == today) todayRemainingHours(dailyCapHours) else dailyCapHours
+            fd = fd.plusDays(1)
+        }
         sorted.forEachIndexed { i, proj ->
             val date = bestAssignment[i]
             if (date != null) finalDayHours[date] = (finalDayHours[date] ?: 0.0) - proj.hoursNeeded
@@ -71,24 +70,73 @@ object Scheduler {
 
         val accepted = mutableListOf<ScheduledProject>()
         val dropped = mutableListOf<DroppedProject>()
+
         sorted.forEachIndexed { i, proj ->
             val date = bestAssignment[i]
             if (date != null) {
                 accepted.add(ScheduledProject(proj, date))
             } else {
-                val reason = when {
-                    proj.hoursNeeded > dailyCapHours ->
-                        "Exceeds working hours per day."
-                    proj.deadlineDate.isBefore(today) ->
-                        "Deadline has already passed."
-                    else ->
-                        "No time could be freed up before this deadline without reducing total earnings."
-                }
+                val reason = buildRejectionReason(proj, today, dailyCapHours, finalDayHours)
                 dropped.add(DroppedProject(proj, reason))
             }
         }
+
         accepted.sortBy { it.assignedDate }
         return ScheduleResult(accepted, dropped, bestIncome.coerceAtLeast(0.0))
+    }
+
+    /**
+     * Builds a specific, actionable rejection message based on why
+     * the backtracking could not (or chose not to) schedule the project.
+     *
+     * Three cases mirror what the algorithm actually checks:
+     *  1. hoursNeeded > dailyCap  →  physically impossible in a single day
+     *  2. deadline already passed →  no valid days to even try
+     *  3. no remaining slot fits  →  earlier-deadline projects claimed all capacity;
+     *                                find the soonest free slot and suggest it
+     */
+    private fun buildRejectionReason(
+        proj: Project,
+        today: LocalDate,
+        dailyCapHours: Double,
+        finalDayHours: Map<LocalDate, Double>
+    ): String {
+        return when {
+            proj.hoursNeeded > dailyCapHours -> {
+                val needed = proj.hoursNeeded.fmt()
+                val cap = dailyCapHours.fmt()
+                "Needs ${needed}h in one day, but your daily cap is ${cap}h. " +
+                        "Raise your daily cap to at least ${needed}h to schedule this."
+            }
+
+            proj.deadlineDate.isBefore(today) -> {
+                "Deadline has already passed (${proj.deadlineDate.format(REASON_FMT)}). " +
+                        "Update the deadline to a future date."
+            }
+
+            else -> {
+                val earliestFreeSlot = finalDayHours.entries
+                    .filter { (date, hours) -> !date.isBefore(today) && hours >= proj.hoursNeeded }
+                    .minByOrNull { it.key }
+
+                if (earliestFreeSlot != null && earliestFreeSlot.key.isAfter(proj.deadlineDate)) {
+                    "All days before ${proj.deadlineDate.format(REASON_FMT)} were filled by " +
+                            "earlier-deadline projects. Extend the deadline to " +
+                            "${earliestFreeSlot.key.format(REASON_FMT)} to fit this in."
+                } else if (earliestFreeSlot != null) {
+                    "Skipping this project allowed higher-earning work to fit the schedule. " +
+                            "Raise your daily cap to create more room."
+                } else {
+                    "Your schedule is fully booked. Raise your daily cap or remove another project to fit this in."
+                }
+            }
+        }
+    }
+
+    private fun todayRemainingHours(dailyCapHours: Double): Double {
+        val now = java.time.LocalTime.now()
+        val secondsLeft = (24 * 3600) - (now.hour * 3600 + now.minute * 60 + now.second)
+        return minOf(dailyCapHours, secondsLeft / 3600.0).coerceAtLeast(0.0)
     }
 }
 

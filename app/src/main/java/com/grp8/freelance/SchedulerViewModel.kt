@@ -37,10 +37,33 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         _projects.value += Project(idCtr++, name, clientName, deadline, hours, rate)
         viewModelScope.launch { repository.save(_projects.value) }
     }
+
     fun removeProject(id: Int) {
         _projects.value = _projects.value.filter { it.id != id }
         viewModelScope.launch { repository.save(_projects.value) }
     }
+
+    // ── NEW ──────────────────────────────────────────────────────────────────
+    fun updateProject(
+        id: Int,
+        name: String,
+        clientName: String,
+        deadline: LocalDate,
+        hours: Double,
+        rate: Double
+    ) {
+        _projects.value = _projects.value.map { p ->
+            if (p.id == id) p.copy(
+                name = name,
+                clientName = clientName,
+                deadlineDate = deadline,
+                hoursNeeded = hours,
+                ratePerHour = rate
+            ) else p
+        }
+        viewModelScope.launch { repository.save(_projects.value) }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun setDailyCap(hours: Double) {
         _dailyCap.value = hours.coerceIn(1.0, 16.0)

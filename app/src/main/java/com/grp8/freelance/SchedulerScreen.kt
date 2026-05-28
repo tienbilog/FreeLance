@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit          // ← NEW
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,20 +37,50 @@ val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
 @Composable
 fun SchedulerApp(viewModel: SchedulerViewModel) {
     val result by viewModel.result.collectAsStateWithLifecycle()
+
+    // Project the user wants to edit, lifted here so ResultsScreen can hand
+    // one back to InputScreen before clearing the result.
+    var projectToEdit by remember { mutableStateOf<Project?>(null) }   // ← NEW
+
     if (result != null) {
-        ResultsScreen(result = result!!, onBack = { viewModel.clearResult() })
+        ResultsScreen(
+            result = result!!,
+            onBack = { viewModel.clearResult() },
+            onEditProject = { project ->                               // ← NEW
+                viewModel.clearResult()
+                projectToEdit = project
+            }
+        )
     } else {
-        InputScreen(viewModel = viewModel)
+        InputScreen(
+            viewModel = viewModel,
+            initialEditProject = projectToEdit,                        // ← NEW
+            onEditHandled = { projectToEdit = null }                   // ← NEW
+        )
     }
 }
 
 // ── Input Screen ──────────────────────────────────────────────
 
 @Composable
-fun InputScreen(viewModel: SchedulerViewModel) {
+fun InputScreen(
+    viewModel: SchedulerViewModel,
+    initialEditProject: Project? = null,   // ← NEW
+    onEditHandled: () -> Unit = {}         // ← NEW
+) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     val dailyCap by viewModel.dailyCap.collectAsStateWithLifecycle()
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showAddDialog  by remember { mutableStateOf(false) }
+    var editingProject by remember { mutableStateOf<Project?>(null) }  // ← NEW
+
+    // When the user arrives here from ResultsScreen via the Edit button,
+    // open the edit dialog immediately.                                 // ← NEW
+    LaunchedEffect(initialEditProject) {
+        if (initialEditProject != null) {
+            editingProject = initialEditProject
+            onEditHandled()
+        }
+    }
 
     if (showAddDialog) {
         AddProjectDialog(
@@ -60,6 +91,19 @@ fun InputScreen(viewModel: SchedulerViewModel) {
             }
         )
     }
+
+    // ── Edit dialog ──────────────────────────────────────────────────── NEW
+    editingProject?.let { proj ->
+        EditProjectDialog(
+            project = proj,
+            onDismiss = { editingProject = null },
+            onConfirm = { name, client, deadline, hours, rate ->
+                viewModel.updateProject(proj.id, name, client, deadline, hours, rate)
+                editingProject = null
+            }
+        )
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     Scaffold(
         containerColor = White,
@@ -112,9 +156,13 @@ fun InputScreen(viewModel: SchedulerViewModel) {
                 Text("Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
-            // Project cards
+            // Project cards – now receive onEdit as well               // ← CHANGED
             items(projects, key = { it.id }) { project ->
-                ProjectCard(project = project, onDelete = { viewModel.removeProject(project.id) })
+                ProjectCard(
+                    project  = project,
+                    onDelete = { viewModel.removeProject(project.id) },
+                    onEdit   = { editingProject = project }             // ← NEW
+                )
             }
 
             // Add button — half-size after first project
@@ -148,7 +196,6 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
                     Text("Working hours per day", style = MaterialTheme.typography.bodySmall,
                         color = SlateDeep)
                 }
-                // Big hour badge
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -167,7 +214,6 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
 
             Spacer(Modifier.height(14.dp))
 
-            // Segmented dot track
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -214,7 +260,11 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
 // ── Project Card ──────────────────────────────────────────────
 
 @Composable
-fun ProjectCard(project: Project, onDelete: () -> Unit) {
+fun ProjectCard(
+    project: Project,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit            // ← NEW
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -235,14 +285,33 @@ fun ProjectCard(project: Project, onDelete: () -> Unit) {
                     InfoChip("₱${project.ratePerHour.fmt()}/hr")
                 }
             }
-            // X button
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "Remove",
-                    tint = SlateDeep, modifier = Modifier.size(18.dp))
+            // ── Edit + Delete buttons ─────────────────────────── NEW
+            Row {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = AccentBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Remove",
+                        tint = SlateDeep,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
+            // ────────────────────────────────────────────────────────
         }
     }
 }
@@ -307,24 +376,70 @@ fun AddProjectButton(compact: Boolean, onClick: () -> Unit) {
 // ── Add Project Dialog ────────────────────────────────────────
 
 @Composable
-fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDate, Double, Double) -> Unit) {
-    var name     by remember { mutableStateOf("") }
-    var client   by remember { mutableStateOf("") }
-    var deadline by remember { mutableStateOf<LocalDate?>(null) }
-    var hours    by remember { mutableStateOf("") }
-    var rate     by remember { mutableStateOf("") }
+fun AddProjectDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, LocalDate, Double, Double) -> Unit
+) {
+    ProjectFormDialog(
+        title    = "New Project",
+        confirmLabel = "Add",
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
+    )
+}
+
+// ── Edit Project Dialog ───────────────────────────────────────  NEW
+
+@Composable
+fun EditProjectDialog(
+    project: Project,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, LocalDate, Double, Double) -> Unit
+) {
+    ProjectFormDialog(
+        title        = "Edit Project",
+        confirmLabel = "Save",
+        initialName     = project.name,
+        initialClient   = project.clientName,
+        initialDeadline = project.deadlineDate,
+        initialHours    = project.hoursNeeded.fmt(),
+        initialRate     = project.ratePerHour.fmt(),
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
+    )
+}
+
+// ── Shared form used by both Add and Edit dialogs ─────────────  NEW
+
+@Composable
+private fun ProjectFormDialog(
+    title: String,
+    confirmLabel: String,
+    initialName: String = "",
+    initialClient: String = "",
+    initialDeadline: LocalDate? = null,
+    initialHours: String = "",
+    initialRate: String = "",
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, LocalDate, Double, Double) -> Unit
+) {
+    var name     by remember { mutableStateOf(initialName) }
+    var client   by remember { mutableStateOf(initialClient) }
+    var deadline by remember { mutableStateOf(initialDeadline) }
+    var hours    by remember { mutableStateOf(initialHours) }
+    var rate     by remember { mutableStateOf(initialRate) }
     var nameError   by remember { mutableStateOf(false) }
     var clientError by remember { mutableStateOf(false) }
-    var dateError  by remember { mutableStateOf(false) }
-    var hoursError by remember { mutableStateOf(false) }
-    var rateError  by remember { mutableStateOf(false) }
+    var dateError   by remember { mutableStateOf(false) }
+    var hoursError  by remember { mutableStateOf(false) }
+    var rateError   by remember { mutableStateOf(false) }
 
     fun tryConfirm() {
         nameError   = name.isBlank()
         clientError = client.isBlank()
         dateError   = deadline == null
-        hoursError = hours.isBlank() || hours.toDoubleOrNull() == null || hours.toDouble() <= 0
-        rateError  = rate.isBlank() || rate.toDoubleOrNull() == null || rate.toDouble() <= 0
+        hoursError  = hours.isBlank() || hours.toDoubleOrNull() == null || hours.toDouble() <= 0
+        rateError   = rate.isBlank()  || rate.toDoubleOrNull()  == null || rate.toDouble()  <= 0
         if (nameError || clientError || dateError || hoursError || rateError) return
         onConfirm(name.trim(), client.trim(), deadline!!, hours.toDouble(), rate.toDouble())
     }
@@ -336,7 +451,7 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
             elevation = CardDefaults.cardElevation(8.dp)
         ) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("New Project", style = MaterialTheme.typography.titleLarge, color = Ink)
+                Text(title, style = MaterialTheme.typography.titleLarge, color = Ink)
 
                 DialogField("Project name", name,
                     onValueChange = { name = it; nameError = false },
@@ -349,9 +464,8 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
                     errorMsg = "Client name is required"
                 )
 
-                // ── Date Picker Button ──
                 val context = LocalContext.current
-                val today = LocalDate.now()
+                val today   = LocalDate.now()
                 Column {
                     OutlinedButton(
                         onClick = {
@@ -359,7 +473,7 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
                             DatePickerDialog(
                                 context,
                                 { _, year, month, day ->
-                                    deadline = LocalDate.of(year, month + 1, day)
+                                    deadline  = LocalDate.of(year, month + 1, day)
                                     dateError = false
                                 },
                                 d.year, d.monthValue - 1, d.dayOfMonth
@@ -379,7 +493,8 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
                     }
                     if (dateError) {
                         Text("Please select a deadline", color = AccentRed, fontSize = 11.sp,
-                            fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                            fontFamily = InterFamily,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
                     }
                 }
 
@@ -402,14 +517,20 @@ fun AddProjectDialog(onDismiss: () -> Unit, onConfirm: (String, String, LocalDat
 
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
                         Text("Cancel", fontFamily = InterFamily)
                     }
-                    Button(onClick = { tryConfirm() }, modifier = Modifier.weight(1f),
+                    Button(
+                        onClick = { tryConfirm() },
+                        modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)) {
-                        Text("Add", fontFamily = InterFamily)
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                    ) {
+                        Text(confirmLabel, fontFamily = InterFamily)
                     }
                 }
             }
@@ -438,13 +559,14 @@ fun DialogField(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AccentBlue,
+                focusedBorderColor   = AccentBlue,
                 unfocusedBorderColor = SlateMid
             )
         )
         if (isError) {
             Text(errorMsg, color = AccentRed, fontSize = 11.sp,
-                fontFamily = InterFamily, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                fontFamily = InterFamily,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp))
         }
     }
 }
@@ -452,14 +574,19 @@ fun DialogField(
 // ── Results Screen ────────────────────────────────────────────
 
 @Composable
-fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
+fun ResultsScreen(
+    result: ScheduleResult,
+    onBack: () -> Unit,
+    onEditProject: (Project) -> Unit   // ← NEW
+) {
     Scaffold(
         containerColor = White,
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
                 title = {
-                    Text("Schedule Results", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text("Schedule Results",
+                        style = MaterialTheme.typography.titleMedium, color = Ink)
                 },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
@@ -491,22 +618,20 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
                 }
             }
 
-            // Schedule header
             item {
                 Text("Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
-            // Day cards
             val byDate = result.accepted.groupBy { it.assignedDate }
             items(byDate.keys.sorted()) { date ->
                 ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
             }
 
-            // Dropped
             if (result.dropped.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(4.dp))
-                    Text("Dropped Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text("Dropped Projects",
+                        style = MaterialTheme.typography.titleMedium, color = Ink)
                 }
                 items(result.dropped) { dropped ->
                     Card(
@@ -521,14 +646,46 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
                         ) {
                             Text("✗", color = AccentRed, fontSize = 16.sp,
                                 modifier = Modifier.padding(end = 10.dp, top = 2.dp))
-                            Column {
-                                Text(dropped.project.name, style = MaterialTheme.typography.titleMedium,
-                                    color = Ink)
-                                Text("${dropped.project.clientName} · due ${dropped.project.deadlineDate.format(DATE_FMT)}",
-                                    style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(dropped.project.name,
+                                    style = MaterialTheme.typography.titleMedium, color = Ink)
+                                Text(
+                                    "${dropped.project.clientName} · due ${dropped.project.deadlineDate.format(DATE_FMT)}",
+                                    style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                                )
                                 Spacer(Modifier.height(4.dp))
-                                Text(dropped.reason, style = MaterialTheme.typography.bodySmall,
-                                    color = AccentRed)
+                                Text(dropped.reason,
+                                    style = MaterialTheme.typography.bodySmall, color = AccentRed)
+
+                                // ── Edit button ──────────────────────────────  NEW
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { onEditProject(dropped.project) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp, AccentRed
+                                    ),
+                                    contentPadding = PaddingValues(
+                                        horizontal = 12.dp, vertical = 4.dp
+                                    ),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = null,
+                                        tint = AccentRed,
+                                        modifier = Modifier
+                                            .size(13.dp)
+                                            .padding(end = 4.dp)
+                                    )
+                                    Text(
+                                        "Edit project",
+                                        color = AccentRed,
+                                        fontFamily = InterFamily,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                // ─────────────────────────────────────────────
                             }
                         }
                     }
@@ -554,7 +711,7 @@ fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modif
 
 @Composable
 fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
-    val totalHours = items.sumOf { it.project.hoursNeeded }
+    val totalHours  = items.sumOf { it.project.hoursNeeded }
     val totalIncome = items.sumOf { it.project.totalIncome }
 
     Card(
@@ -564,7 +721,6 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            // Date header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -592,7 +748,6 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
             HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
-            // Project rows
             items.forEach { sp ->
                 Row(
                     modifier = Modifier
