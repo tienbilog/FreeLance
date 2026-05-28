@@ -508,7 +508,7 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     Text("Dropped Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
                 }
-                items(result.dropped) { proj ->
+                items(result.dropped) { dropped ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -517,15 +517,18 @@ fun ResultsScreen(result: ScheduleResult, onBack: () -> Unit) {
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             Text("✗", color = AccentRed, fontSize = 16.sp,
-                                modifier = Modifier.padding(end = 10.dp))
+                                modifier = Modifier.padding(end = 10.dp, top = 2.dp))
                             Column {
-                                Text(proj.name, style = MaterialTheme.typography.titleMedium,
+                                Text(dropped.project.name, style = MaterialTheme.typography.titleMedium,
                                     color = Ink)
-                                Text("${proj.clientName} · due ${proj.deadlineDate.format(DATE_FMT)}",
+                                Text("${dropped.project.clientName} · due ${dropped.project.deadlineDate.format(DATE_FMT)}",
                                     style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                                Spacer(Modifier.height(4.dp))
+                                Text(dropped.reason, style = MaterialTheme.typography.bodySmall,
+                                    color = AccentRed)
                             }
                         }
                     }
