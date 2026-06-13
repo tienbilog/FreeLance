@@ -111,11 +111,10 @@ object Scheduler {
                     "All days before ${proj.deadlineDate.format(REASON_FMT)} were filled by " +
                             "earlier-deadline projects. Extend the deadline to " +
                             "${earliestFreeSlot.key.format(REASON_FMT)} to fit this in."
-                } else if (earliestFreeSlot != null) {
-                    "Skipping this project allowed higher-earning work to fit the schedule. " +
-                            "Raise your daily cap to create more room."
                 } else {
-                    "Your schedule is fully booked. Raise your daily cap or remove another project to fit this in."
+                    "Skipping this project allowed higher-earning work to fit the schedule, " +
+                            "or your schedule is fully booked. Raise your daily cap or remove " +
+                            "another project to fit this in."
                 }
             }
         }
