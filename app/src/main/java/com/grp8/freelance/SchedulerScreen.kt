@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grp8.freelance.ui.theme.*
 import java.time.format.DateTimeFormatter
+import androidx.compose.foundation.layout.*
 
 /** Shared date format used across every tab. */
 val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")

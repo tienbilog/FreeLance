@@ -59,9 +59,9 @@ fun ResultsScreen(
                         AccentBlueSoft, AccentBlue, Modifier.weight(1f))
                     MetricCard("Accepted", "${result.accepted.size}", SlateCard, Ink,
                         Modifier.weight(1f))
-                    MetricCard("Dropped", "${result.dropped.size}",
-                        if (result.dropped.isEmpty()) SlateCard else Color(0xFFFFE5E5),
-                        if (result.dropped.isEmpty()) Ink else AccentRed,
+                    MetricCard("Can't Accept", "${result.unscheduled.size}",
+                        if (result.unscheduled.isEmpty()) SlateCard else Color(0xFFFFE5E5),
+                        if (result.unscheduled.isEmpty()) Ink else AccentRed,
                         Modifier.weight(1f))
                 }
             }
@@ -75,13 +75,13 @@ fun ResultsScreen(
                 ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
             }
 
-            if (result.dropped.isNotEmpty()) {
+            if (result.unscheduled.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(4.dp))
-                    Text("Dropped Projects",
+                    Text("Can't Accept These",
                         style = MaterialTheme.typography.titleMedium, color = Ink)
                 }
-                items(result.dropped) { dropped ->
+                items(result.unscheduled) { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -92,131 +92,35 @@ fun ResultsScreen(
                             modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.Top
                         ) {
-                            Text("✗", color = AccentRed, fontSize = 16.sp,
+                            Text("⚠", color = AccentRed, fontSize = 16.sp,
                                 modifier = Modifier.padding(end = 10.dp, top = 2.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(dropped.project.name,
+                                Text(item.project.name,
                                     style = MaterialTheme.typography.titleMedium, color = Ink)
                                 Text(
-                                    "${dropped.project.clientName} · due ${dropped.project.deadlineDate.format(DATE_FMT)}",
+                                    "${item.project.clientName} · due ${item.project.deadlineDate.format(DATE_FMT)}",
                                     style = MaterialTheme.typography.bodySmall, color = SlateDeep
                                 )
                                 Spacer(Modifier.height(4.dp))
-                                Text(dropped.reason,
+                                Text(item.constraint,
                                     style = MaterialTheme.typography.bodySmall, color = AccentRed)
-
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
-                                    onClick = { onEditProject(dropped.project) },
+                                    onClick = { onEditProject(item.project) },
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(1.dp, AccentRed),
-                                    contentPadding = PaddingValues(
-                                        horizontal = 12.dp, vertical = 4.dp
-                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                     modifier = Modifier.height(32.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = null,
-                                        tint = AccentRed,
-                                        modifier = Modifier
-                                            .size(13.dp)
-                                            .padding(end = 4.dp)
-                                    )
-                                    Text(
-                                        "Edit project",
-                                        color = AccentRed,
-                                        fontFamily = InterFamily,
-                                        fontSize = 12.sp
-                                    )
+                                    Icon(Icons.Default.Edit, contentDescription = null,
+                                        tint = AccentRed, modifier = Modifier.size(13.dp).padding(end = 4.dp))
+                                    Text("Edit project", color = AccentRed,
+                                        fontFamily = InterFamily, fontSize = 12.sp)
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modifier: Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = bg),
-        elevation = CardDefaults.cardElevation(0.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-            Spacer(Modifier.height(4.dp))
-            Text(value, fontFamily = InterFamily, fontWeight = FontWeight.Bold,
-                fontSize = 17.sp, color = valueColor)
-        }
-    }
-}
-
-@Composable
-fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
-    val totalHours  = items.sumOf { it.project.hoursNeeded }
-    val totalIncome = items.sumOf { it.project.totalIncome }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        date.format(DateTimeFormatter.ofPattern("EEEE")),
-                        style = MaterialTheme.typography.titleMedium, color = Ink
-                    )
-                    Text(
-                        date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
-                        style = MaterialTheme.typography.bodySmall, color = SlateDeep
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("₱${totalIncome.fmt()}", fontFamily = InterFamily,
-                        fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentBlue)
-                    Text("${totalHours.fmt()}h total",
-                        style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
-            Spacer(Modifier.height(10.dp))
-
-            items.forEach { sp ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(White)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(sp.project.name, style = MaterialTheme.typography.bodyLarge,
-                            color = Ink, fontWeight = FontWeight.Medium)
-                        Text(sp.project.clientName,
-                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("₱${sp.project.totalIncome.fmt()}",
-                            fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp, color = Ink)
-                        Text("${sp.project.hoursNeeded.fmt()}h @ ₱${sp.project.ratePerHour}/hr",
-                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
             }
         }
     }
