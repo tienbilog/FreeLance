@@ -4,13 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.grp8.freelance.ui.theme.*
-
-@Composable
-fun AuthScreen(
-    authViewModel: AuthViewModel,
-    onContinueAsGuest: () -> Unit
-) package com.grp8.freelance
-
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.userProfileChangeRequest
