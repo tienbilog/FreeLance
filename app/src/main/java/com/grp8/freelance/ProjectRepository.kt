@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -22,6 +23,15 @@ class ProjectRepository(private val context: Context) {
         val type = object : TypeToken<List<ProjectJson>>() {}.type
         val list: List<ProjectJson> = gson.fromJson(json, type)
         list.map { it.toProject() }
+    }
+
+    /** One-shot read — used only during guest-to-signed-in data migration. */
+    suspend fun load(): List<Project> {
+        val prefs = context.dataStore.data.first()
+        val json  = prefs[KEY] ?: return emptyList()
+        val type  = object : TypeToken<List<ProjectJson>>() {}.type
+        val list: List<ProjectJson> = gson.fromJson(json, type)
+        return list.map { it.toProject() }
     }
 
     suspend fun save(projects: List<Project>) {
