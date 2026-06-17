@@ -41,23 +41,45 @@ class CloudRepository(private val uid: String) {
 
     // -------------------------------------------------------------------------
     // Serialisation helpers — plain Map<String,Any> so Firestore can store them
-    // without a custom serialiser dependency.
+    // without a custom serialiser dependency. Nullable LocalDate fields are
+    // stored as empty string when absent (Firestore drops null map values).
     // -------------------------------------------------------------------------
     private fun Project.toMap(): Map<String, Any> = mapOf(
-        "id"           to id,
-        "name"         to name,
-        "clientName"   to clientName,
-        "deadlineDate" to deadlineDate.toString(),
-        "hoursNeeded"  to hoursNeeded,
-        "ratePerHour"  to ratePerHour
+        "id"            to id,
+        "name"          to name,
+        "clientName"    to clientName,
+        "deadlineDate"  to deadlineDate.toString(),
+        "hoursNeeded"   to hoursNeeded,
+        "rateType"      to rateType.name,
+        "ratePerHour"   to ratePerHour,
+        "fixedAmount"   to fixedAmount,
+        "status"        to status.name,
+        "assignedDate"  to (assignedDate?.toString() ?: ""),
+        "hoursLogged"   to hoursLogged,
+        "completedDate" to (completedDate?.toString() ?: "")
     )
 
-    private fun Map<String, Any>.toProject() = Project(
-        id           = (get("id") as? Long)?.toInt() ?: 0,
-        name         = get("name") as? String ?: "",
-        clientName   = get("clientName") as? String ?: "",
-        deadlineDate = LocalDate.parse(get("deadlineDate") as? String ?: LocalDate.now().toString()),
-        hoursNeeded  = (get("hoursNeeded") as? Double) ?: 0.0,
-        ratePerHour  = (get("ratePerHour") as? Double) ?: 0.0
-    )
+    private fun Map<String, Any>.toProject(): Project {
+        fun dateOrNull(key: String): LocalDate? {
+            val raw = get(key) as? String
+            return if (raw.isNullOrBlank()) null else LocalDate.parse(raw)
+        }
+
+        return Project(
+            id            = (get("id") as? Long)?.toInt() ?: 0,
+            name          = get("name") as? String ?: "",
+            clientName    = get("clientName") as? String ?: "",
+            deadlineDate  = LocalDate.parse(get("deadlineDate") as? String ?: LocalDate.now().toString()),
+            hoursNeeded   = (get("hoursNeeded") as? Double) ?: 0.0,
+            rateType      = runCatching { RateType.valueOf(get("rateType") as? String ?: "HOURLY") }
+                .getOrDefault(RateType.HOURLY),
+            ratePerHour   = (get("ratePerHour") as? Double) ?: 0.0,
+            fixedAmount   = (get("fixedAmount") as? Double) ?: 0.0,
+            status        = runCatching { ProjectStatus.valueOf(get("status") as? String ?: "POTENTIAL") }
+                .getOrDefault(ProjectStatus.POTENTIAL),
+            assignedDate  = dateOrNull("assignedDate"),
+            hoursLogged   = (get("hoursLogged") as? Double) ?: 0.0,
+            completedDate = dateOrNull("completedDate")
+        )
+    }
 }

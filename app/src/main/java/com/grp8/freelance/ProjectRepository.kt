@@ -39,15 +39,52 @@ class ProjectRepository(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[KEY] = json }
     }
 
+    // -------------------------------------------------------------------------
+    // Serialised shape. Stored as plain strings/primitives so Gson doesn't need
+    // custom adapters for the enum or nullable LocalDate fields.
+    // -------------------------------------------------------------------------
     private data class ProjectJson(
         val id: Int,
         val name: String,
         val clientName: String,
         val deadlineDate: String,
         val hoursNeeded: Double,
-        val ratePerHour: Double
+        val rateType: String,
+        val ratePerHour: Double,
+        val fixedAmount: Double,
+        val status: String,
+        val assignedDate: String?,
+        val hoursLogged: Double,
+        val completedDate: String?
     )
 
-    private fun Project.toJson() = ProjectJson(id, name, clientName, deadlineDate.toString(), hoursNeeded, ratePerHour)
-    private fun ProjectJson.toProject() = Project(id, name, clientName, LocalDate.parse(deadlineDate), hoursNeeded, ratePerHour)
+    private fun Project.toJson() = ProjectJson(
+        id            = id,
+        name          = name,
+        clientName    = clientName,
+        deadlineDate  = deadlineDate.toString(),
+        hoursNeeded   = hoursNeeded,
+        rateType      = rateType.name,
+        ratePerHour   = ratePerHour,
+        fixedAmount   = fixedAmount,
+        status        = status.name,
+        assignedDate  = assignedDate?.toString(),
+        hoursLogged   = hoursLogged,
+        completedDate = completedDate?.toString()
+    )
+
+    private fun ProjectJson.toProject() = Project(
+        id            = id,
+        name          = name,
+        clientName    = clientName,
+        deadlineDate  = LocalDate.parse(deadlineDate),
+        hoursNeeded   = hoursNeeded,
+        rateType      = runCatching { RateType.valueOf(rateType) }.getOrDefault(RateType.HOURLY),
+        ratePerHour   = ratePerHour,
+        fixedAmount   = fixedAmount,
+        status        = runCatching { ProjectStatus.valueOf(status) }.getOrDefault(ProjectStatus.POTENTIAL),
+        assignedDate  = assignedDate?.let { LocalDate.parse(it) },
+        hoursLogged   = hoursLogged,
+        completedDate = completedDate?.let { LocalDate.parse(it) }
+    )
 }
