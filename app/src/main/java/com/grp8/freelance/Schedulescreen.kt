@@ -107,7 +107,12 @@ fun ScheduleScreen(
                         Spacer(Modifier.height(4.dp))
                         Text("Proposed Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
                     }
-                    val byDate = result.accepted.groupBy { it.assignedDate }
+                    val flattened = result.accepted.flatMap { sp ->
+                        sp.assignments.map { (date, hours) ->
+                            date to Pair(sp, hours)
+                        }
+                    }
+                    val byDate = flattened.groupBy({ it.first }, { it.second })
                     items(byDate.keys.sorted()) { date ->
                         ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
                     }
@@ -191,9 +196,9 @@ fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modif
 }
 
 @Composable
-fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
-    val totalHours  = items.sumOf { it.project.hoursNeeded }
-    val totalIncome = items.sumOf { it.project.totalIncome }
+fun ScheduleDayCard(date: LocalDate, items: List<Pair<ScheduledProject, Double>>) {
+    val totalHours  = items.sumOf { it.second }
+    val totalIncome = items.sumOf { (it.second / it.first.project.hoursNeeded) * it.first.project.totalIncome }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -229,7 +234,7 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
             HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
-            items.forEach { sp ->
+            items.forEach { (sp, hoursForDay) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -246,11 +251,12 @@ fun ScheduleDayCard(date: LocalDate, items: List<ScheduledProject>) {
                             style = MaterialTheme.typography.bodySmall, color = SlateDeep)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("₱${sp.project.totalIncome.fmt()}",
+                        val incomeForDay = (hoursForDay / sp.project.hoursNeeded) * sp.project.totalIncome
+                        Text("₱${incomeForDay.fmt()}",
                             fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp, color = Ink)
                         Text(
-                            "${sp.project.hoursNeeded.fmt()}h" +
+                            "${hoursForDay.fmt()}h" +
                                     if (sp.project.rateType == RateType.HOURLY)
                                         " @ ₱${sp.project.ratePerHour.fmt()}/hr" else " · fixed",
                             style = MaterialTheme.typography.bodySmall, color = SlateDeep

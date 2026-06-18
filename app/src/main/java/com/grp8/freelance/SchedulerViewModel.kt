@@ -134,12 +134,12 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun acceptSchedule() {
         val result = _suggested.value ?: return
-        val acceptedIds = result.accepted.associate { it.project.id to it.assignedDate }
+        val acceptedAssignments = result.accepted.associate { it.project.id to it.assignments }
 
         _allProjects.value = _allProjects.value.map { p ->
-            val assignedDate = acceptedIds[p.id]
-            if (assignedDate != null) {
-                p.copy(status = ProjectStatus.SCHEDULED, assignedDate = assignedDate)
+            val newAssignments = acceptedAssignments[p.id]
+            if (newAssignments != null) {
+                p.copy(status = ProjectStatus.SCHEDULED, assignedDates = newAssignments)
             } else p
         }
         _suggested.value = null
@@ -195,10 +195,10 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         val overrides = capacityOverride?.let { (date, hours) -> mapOf(date to hours) } ?: emptyMap()
         val result = Scheduler.reschedule(remaining, _weeklySchedule.value, capacityOverrides = overrides)
 
-        val newDates = result.accepted.associate { it.project.id to it.assignedDate }
+        val newDates = result.accepted.associate { it.project.id to it.assignments }
         _allProjects.value = _allProjects.value.map { p ->
-            val newDate = newDates[p.id]
-            if (newDate != null) p.copy(assignedDate = newDate) else p
+            val newAssignments = newDates[p.id]
+            if (newAssignments != null) p.copy(assignedDates = newAssignments) else p
         }
         persist()
         // The reschedule action itself resolves whatever ahead/behind state

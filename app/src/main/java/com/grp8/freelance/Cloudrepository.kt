@@ -54,7 +54,7 @@ class CloudRepository(private val uid: String) {
         "ratePerHour"   to ratePerHour,
         "fixedAmount"   to fixedAmount,
         "status"        to status.name,
-        "assignedDate"  to (assignedDate?.toString() ?: ""),
+        "assignedDates" to assignedDates.mapKeys { it.key.toString() },
         "hoursLogged"   to hoursLogged,
         "completedDate" to (completedDate?.toString() ?: "")
     )
@@ -64,6 +64,9 @@ class CloudRepository(private val uid: String) {
             val raw = get(key) as? String
             return if (raw.isNullOrBlank()) null else LocalDate.parse(raw)
         }
+
+        val datesRaw = get("assignedDates") as? Map<String, Number> ?: emptyMap()
+        val assignedDatesMap = datesRaw.mapKeys { LocalDate.parse(it.key) }.mapValues { it.value.toDouble() }
 
         return Project(
             id            = (get("id") as? Long)?.toInt() ?: 0,
@@ -77,7 +80,7 @@ class CloudRepository(private val uid: String) {
             fixedAmount   = (get("fixedAmount") as? Double) ?: 0.0,
             status        = runCatching { ProjectStatus.valueOf(get("status") as? String ?: "POTENTIAL") }
                 .getOrDefault(ProjectStatus.POTENTIAL),
-            assignedDate  = dateOrNull("assignedDate"),
+            assignedDates = assignedDatesMap,
             hoursLogged   = (get("hoursLogged") as? Double) ?: 0.0,
             completedDate = dateOrNull("completedDate")
         )

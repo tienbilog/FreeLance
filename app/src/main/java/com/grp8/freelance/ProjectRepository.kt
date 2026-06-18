@@ -53,7 +53,7 @@ class ProjectRepository(private val context: Context) {
         val ratePerHour: Double,
         val fixedAmount: Double,
         val status: String,
-        val assignedDate: String?,
+        val assignedDates: Map<String, Double>?,
         val hoursLogged: Double,
         val completedDate: String?
     )
@@ -68,7 +68,7 @@ class ProjectRepository(private val context: Context) {
         ratePerHour   = ratePerHour,
         fixedAmount   = fixedAmount,
         status        = status.name,
-        assignedDate  = assignedDate?.toString(),
+        assignedDates = if (assignedDates.isEmpty()) null else assignedDates.mapKeys { it.key.toString() },
         hoursLogged   = hoursLogged,
         completedDate = completedDate?.toString()
     )
@@ -83,7 +83,7 @@ class ProjectRepository(private val context: Context) {
         ratePerHour   = ratePerHour,
         fixedAmount   = fixedAmount,
         status        = runCatching { ProjectStatus.valueOf(status) }.getOrDefault(ProjectStatus.POTENTIAL),
-        assignedDate  = assignedDate?.let { LocalDate.parse(it) },
+        assignedDates = assignedDates?.mapKeys { LocalDate.parse(it.key) } ?: emptyMap(),
         hoursLogged   = hoursLogged,
         completedDate = completedDate?.let { LocalDate.parse(it) }
     )

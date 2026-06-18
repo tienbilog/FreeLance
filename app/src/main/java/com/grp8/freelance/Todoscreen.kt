@@ -42,7 +42,6 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
     val allProjects by viewModel.allProjects.collectAsStateWithLifecycle()
     val scheduled = allProjects
         .filter { it.status == ProjectStatus.SCHEDULED }
-        .sortedBy { it.assignedDate }
     val pace by viewModel.paceStatus.collectAsStateWithLifecycle()
 
     var completingProject by remember { mutableStateOf<Project?>(null) }
@@ -115,7 +114,12 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 }
             }
 
-            val byDate = scheduled.groupBy { it.assignedDate!! }
+            val flattened = scheduled.flatMap { proj ->
+                proj.assignedDates.map { (date, hours) ->
+                    date to Pair(proj, hours)
+                }
+            }
+            val byDate = flattened.groupBy({ it.first }, { it.second })
             byDate.keys.sorted().forEach { date ->
                 item {
                     Text(
@@ -125,9 +129,10 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
-                items(byDate[date]!!, key = { it.id }) { project ->
+                items(byDate[date]!!, key = { "${date}_${it.first.id}" }) { (project, hoursForDay) ->
                     ToDoCard(
                         project = project,
+                        hoursForDay = hoursForDay,
                         onMarkDone = { completingProject = project }
                     )
                 }
@@ -173,6 +178,7 @@ private fun AheadBanner(hoursSaved: Double, onMoveUp: () -> Unit, onDismiss: () 
 @Composable
 private fun ToDoCard(
     project: Project,
+    hoursForDay: Double,
     onMarkDone: () -> Unit
 ) {
     Card(
@@ -199,7 +205,7 @@ private fun ToDoCard(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip("📅 due ${project.deadlineDate.format(DATE_FMT)}")
-                    InfoChip("⏱ est. ${project.hoursNeeded.fmt()}h")
+                    InfoChip("⏱ ${hoursForDay.fmt()}h today")
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(

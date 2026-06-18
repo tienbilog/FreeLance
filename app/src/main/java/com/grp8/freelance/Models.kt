@@ -27,7 +27,7 @@ data class Project(
     val ratePerHour: Double = 0.0,    // used when rateType == HOURLY
     val fixedAmount: Double = 0.0,    // used when rateType == FIXED
     val status: ProjectStatus = ProjectStatus.POTENTIAL,
-    val assignedDate: LocalDate? = null,     // set once scheduled (Phase 2 → 3)
+    val assignedDates: Map<LocalDate, Double> = emptyMap(), // date -> hours allocated
     val hoursLogged: Double = 0.0,            // actual hours worked so far (Phase 3)
     val completedDate: LocalDate? = null      // set once marked done (Phase 3 → 4)
 ) {
@@ -43,7 +43,7 @@ data class Project(
 
 data class ScheduledProject(
     val project: Project,
-    val assignedDate: LocalDate
+    val assignments: Map<LocalDate, Double>
 )
 
 /** A potential project that the optimizer could not fit into the schedule. */

@@ -70,7 +70,12 @@ fun ResultsScreen(
                 Text("Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
             }
 
-            val byDate = result.accepted.groupBy { it.assignedDate }
+            val flattened = result.accepted.flatMap { sp ->
+                sp.assignments.map { (date, hours) ->
+                    date to Pair(sp, hours)
+                }
+            }
+            val byDate = flattened.groupBy({ it.first }, { it.second })
             items(byDate.keys.sorted()) { date ->
                 ScheduleDayCard(date = date, items = byDate[date] ?: emptyList())
             }
