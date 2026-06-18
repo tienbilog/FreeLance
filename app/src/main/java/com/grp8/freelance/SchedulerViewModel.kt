@@ -26,8 +26,8 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _allProjects = MutableStateFlow<List<Project>>(emptyList())
     val allProjects: StateFlow<List<Project>> = _allProjects.asStateFlow()
 
-    private val _dailyCap = MutableStateFlow(8.0)
-    val dailyCap: StateFlow<Double> = _dailyCap.asStateFlow()
+    private val _weeklySchedule = MutableStateFlow<Map<LocalDate, Double>>(emptyMap())
+    val weeklySchedule: StateFlow<Map<LocalDate, Double>> = _weeklySchedule.asStateFlow()
 
     /** Phase 1→2 preview — populated by runOptimizer(), cleared by acceptSchedule()/discard. */
     private val _suggested = MutableStateFlow<ScheduleResult?>(null)
@@ -65,6 +65,13 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     // =========================================================================
     // PHASE 1 — OPTIMIZER: add/edit/remove potential projects
     // =========================================================================
+    /** The 7 dates (Mon–Sun) of the current calendar week, for the weekly schedule picker. */
+    fun currentWeekDates(): List<LocalDate> {
+        val today = LocalDate.now()
+        val monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        return (0..6).map { monday.plusDays(it.toLong()) }
+    }
+
     fun addPotentialProject(
         name: String, clientName: String, deadline: LocalDate, hours: Double,
         rateType: RateType, ratePerHour: Double, fixedAmount: Double
@@ -100,15 +107,21 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         _suggested.value = null
     }
 
-    fun setDailyCap(hours: Double) {
-        _dailyCap.value = hours.coerceIn(1.0, 16.0)
+    /**
+     * Sets which days this week the user is dedicating time to work, and how
+     * many hours each. Days not included fall back to a small emergency
+     * capacity ([UNSELECTED_DAY_FALLBACK_HOURS]) rather than zero.
+     * Applies only to the current calendar week — must be re-set each week.
+     */
+    fun setWeeklySchedule(dayHours: Map<LocalDate, Double>) {
+        _weeklySchedule.value = dayHours.mapValues { (_, h) -> h.coerceIn(0.0, 16.0) }
     }
 
     // =========================================================================
     // PHASE 1 → 2 — run the optimizer on potential projects (preview only)
     // =========================================================================
     fun runOptimizer() {
-        _suggested.value = Scheduler.schedule(potentialProjects, _dailyCap.value)
+        _suggested.value = Scheduler.schedule(potentialProjects, _weeklySchedule.value)
     }
 
     fun discardSuggestion() { _suggested.value = null }
@@ -137,30 +150,32 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     // PHASE 3 — TO-DO LIST: logging hours, pace tracking, rescheduling
     // =========================================================================
 
-    /** User updates how many hours they've actually worked on a scheduled project. */
-    fun logHours(projectId: Int, hoursWorked: Double) {
-        _allProjects.value = _allProjects.value.map { p ->
-            if (p.id == projectId) p.copy(hoursLogged = hoursWorked) else p
-        }
-        persist()
-        recomputePace()
-    }
-
     /**
-     * Marks a scheduled project as finished. Locks in the actual hours worked
-     * (defaulting to the original estimate if never logged) and flips it to DONE,
-     * which immediately surfaces it on the Income tab.
+     * Marks a scheduled project as finished, given the ACTUAL hours it took.
+     * This immediately determines whether the user finished ahead of or
+     * behind their original estimate, and updates [paceStatus] accordingly
+     * so the To-Do screen can offer the right follow-up action:
+     *   • Ahead  → offer to re-run the optimizer and move remaining work up
+     *   • Behind → suggest boosting a future day's capacity to catch up
      */
-    fun markDone(projectId: Int) {
+    fun completeProject(projectId: Int, actualHours: Double) {
+        val project = _allProjects.value.find { it.id == projectId } ?: return
+
         _allProjects.value = _allProjects.value.map { p ->
             if (p.id == projectId) p.copy(
-                status = ProjectStatus.DONE,
+                status        = ProjectStatus.DONE,
                 completedDate = LocalDate.now(),
-                hoursLogged = if (p.hoursLogged > 0.0) p.hoursLogged else p.hoursNeeded
+                hoursLogged   = actualHours
             ) else p
         }
         persist()
-        recomputePace()
+
+        val delta = project.hoursNeeded - actualHours
+        _paceStatus.value = when {
+            delta > 0.0  -> PaceStatus.Ahead(delta)
+            delta < 0.0  -> PaceStatus.Behind(-delta)
+            else         -> PaceStatus.OnTrack
+        }
     }
 
     /**
@@ -178,7 +193,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         if (remaining.isEmpty()) return
 
         val overrides = capacityOverride?.let { (date, hours) -> mapOf(date to hours) } ?: emptyMap()
-        val result = Scheduler.reschedule(remaining, _dailyCap.value, overrides)
+        val result = Scheduler.reschedule(remaining, _weeklySchedule.value, capacityOverrides = overrides)
 
         val newDates = result.accepted.associate { it.project.id to it.assignedDate }
         _allProjects.value = _allProjects.value.map { p ->
@@ -186,37 +201,9 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
             if (newDate != null) p.copy(assignedDate = newDate) else p
         }
         persist()
-        recomputePace()
-    }
-
-    /**
-     * Recomputes whether the user is ahead of, behind, or on track with their
-     * schedule, based on logged hours vs. original estimates across all
-     * still-active (SCHEDULED, not yet DONE) projects.
-     *
-     * Ahead:  a project was finished using fewer hours than estimated.
-     * Behind: cumulative hours logged across unfinished projects exceed what
-     *         was estimated for the time already elapsed toward their deadlines.
-     */
-    private fun recomputePace() {
-        val active = scheduledProjects
-        if (active.isEmpty()) {
-            _paceStatus.value = PaceStatus.OnTrack
-            return
-        }
-
-        // "Ahead" signal: any project finished today logged fewer hours than estimated.
-        val finishedToday = doneProjects.filter { it.completedDate == LocalDate.now() }
-        val hoursSaved = finishedToday.sumOf { (it.hoursNeeded - it.hoursLogged).coerceAtLeast(0.0) }
-
-        // "Behind" signal: hours logged so far beyond estimate on still-open projects.
-        val hoursOver = active.sumOf { (it.hoursLogged - it.hoursNeeded).coerceAtLeast(0.0) }
-
-        _paceStatus.value = when {
-            hoursSaved > 0.0 -> PaceStatus.Ahead(hoursSaved)
-            hoursOver  > 0.0 -> PaceStatus.Behind(hoursOver)
-            else              -> PaceStatus.OnTrack
-        }
+        // The reschedule action itself resolves whatever ahead/behind state
+        // triggered it, so clear the banner once applied.
+        _paceStatus.value = PaceStatus.OnTrack
     }
 
     fun acknowledgePace() { _paceStatus.value = PaceStatus.OnTrack }

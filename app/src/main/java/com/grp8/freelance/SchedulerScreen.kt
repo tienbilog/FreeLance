@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,9 +78,7 @@ fun SchedulerApp(
             }
         }
     ) { padding ->
-        androidx.compose.foundation.layout.Box(
-            modifier = androidx.compose.ui.Modifier.padding(bottom = padding.calculateBottomPadding())
-        ) {
+        Box(modifier = Modifier.padding(bottom = padding.calculateBottomPadding())) {
             when (selectedTab) {
                 0 -> OptimizerScreen(viewModel, username, onSignOut)
                 1 -> ScheduleScreen(viewModel, onAccepted = { selectedTab = 2 })

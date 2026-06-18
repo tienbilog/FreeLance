@@ -29,13 +29,13 @@ import java.util.Locale
  *
  * The committed, working schedule. Projects here are real obligations — they
  * came from an accepted suggestion in Phase 2 and can't simply be dropped.
- * Freelancers control their own time though, so this screen lets the user:
  *
- *  • Log actual hours worked on a project (may differ from the original estimate)
- *  • Check a project off as done — early completions surface an "ahead of
- *    schedule" prompt offering to re-optimize the remaining queue
- *  • See a "behind schedule" banner if logged hours are running over estimate,
- *    with the option to grant a one-time capacity boost on a future day
+ * Checking a project off as done immediately asks how many hours it actually
+ * took. That's compared against the original estimate right there:
+ *  • Finished in FEWER hours → "ahead of schedule" — offers to re-run the
+ *    optimizer so remaining projects can move up and take advantage of it.
+ *  • Took MORE hours → "behind schedule" — suggests boosting a future day's
+ *    capacity (one-time) to make up the difference.
  */
 @Composable
 fun ToDoScreen(viewModel: SchedulerViewModel) {
@@ -45,21 +45,21 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
         .sortedBy { it.assignedDate }
     val pace by viewModel.paceStatus.collectAsStateWithLifecycle()
 
-    var editingHoursFor by remember { mutableStateOf<Project?>(null) }
-    var showCatchUpFor   by remember { mutableStateOf<PaceStatus.Behind?>(null) }
+    var completingProject by remember { mutableStateOf<Project?>(null) }
+    var showCatchUpFor     by remember { mutableStateOf<PaceStatus.Behind?>(null) }
 
-    // Surface the "ahead" prompt the moment pace flips to Ahead.
+    // Surface the catch-up dialog the moment pace flips to Behind.
     LaunchedEffect(pace) {
         if (pace is PaceStatus.Behind) showCatchUpFor = pace as PaceStatus.Behind
     }
 
-    editingHoursFor?.let { proj ->
-        LogHoursDialog(
+    completingProject?.let { proj ->
+        CompleteProjectDialog(
             project = proj,
-            onDismiss = { editingHoursFor = null },
-            onConfirm = { hours ->
-                viewModel.logHours(proj.id, hours)
-                editingHoursFor = null
+            onDismiss = { completingProject = null },
+            onConfirm = { actualHours ->
+                viewModel.completeProject(proj.id, actualHours)
+                completingProject = null
             }
         )
     }
@@ -87,7 +87,7 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 Text("To-Do List", style = MaterialTheme.typography.displayLarge, color = Ink)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Your committed schedule. Log hours as you go.",
+                    "Your committed schedule. Check off projects as you finish them.",
                     style = MaterialTheme.typography.bodyMedium, color = SlateDeep
                 )
             }
@@ -100,17 +100,6 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                         hoursSaved = ahead.hoursSaved,
                         onMoveUp = { viewModel.rescheduleRemaining(); viewModel.acknowledgePace() },
                         onDismiss = { viewModel.acknowledgePace() }
-                    )
-                }
-            }
-
-            // ---- Behind-schedule persistent banner (until resolved via dialog) ----
-            if (pace is PaceStatus.Behind) {
-                val behind = pace as PaceStatus.Behind
-                item {
-                    BehindBanner(
-                        hoursOver = behind.hoursOver,
-                        onCatchUp = { showCatchUpFor = behind }
                     )
                 }
             }
@@ -139,8 +128,7 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 items(byDate[date]!!, key = { it.id }) { project ->
                     ToDoCard(
                         project = project,
-                        onLogHours = { editingHoursFor = project },
-                        onMarkDone = { viewModel.markDone(project.id) }
+                        onMarkDone = { completingProject = project }
                     )
                 }
             }
@@ -161,8 +149,8 @@ private fun AheadBanner(hoursSaved: Double, onMoveUp: () -> Unit, onDismiss: () 
                 style = MaterialTheme.typography.titleMedium, color = AccentGreen)
             Spacer(Modifier.height(4.dp))
             Text(
-                "You finished with ${hoursSaved.fmt()}h to spare. Want to move up your " +
-                        "upcoming projects to take advantage of the extra time?",
+                "You finished that project ${hoursSaved.fmt()}h faster than estimated. Want to " +
+                        "re-run the optimizer so your remaining projects can move up?",
                 style = MaterialTheme.typography.bodySmall, color = InkSoft
             )
             Spacer(Modifier.height(10.dp))
@@ -183,42 +171,10 @@ private fun AheadBanner(hoursSaved: Double, onMoveUp: () -> Unit, onDismiss: () 
 }
 
 @Composable
-private fun BehindBanner(hoursOver: Double, onCatchUp: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE5E5)),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Text("⏳ You're falling behind",
-                style = MaterialTheme.typography.titleMedium, color = AccentRed)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "You're ${hoursOver.fmt()}h behind your original estimates. Increase your " +
-                        "capacity on a day you're free to help catch up.",
-                style = MaterialTheme.typography.bodySmall, color = InkSoft
-            )
-            Spacer(Modifier.height(10.dp))
-            Button(
-                onClick = onCatchUp,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentRed)
-            ) {
-                Text("Add catch-up time", fontFamily = InterFamily, fontSize = 13.sp)
-            }
-        }
-    }
-}
-
-@Composable
 private fun ToDoCard(
     project: Project,
-    onLogHours: () -> Unit,
     onMarkDone: () -> Unit
 ) {
-    val overEstimate = project.hoursLogged > project.hoursNeeded
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -243,57 +199,48 @@ private fun ToDoCard(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip("📅 due ${project.deadlineDate.format(DATE_FMT)}")
-                    InfoChip(
-                        if (project.hoursLogged > 0.0)
-                            "⏱ ${project.hoursLogged.fmt()}/${project.hoursNeeded.fmt()}h"
-                        else
-                            "⏱ est. ${project.hoursNeeded.fmt()}h"
-                    )
-                }
-                if (overEstimate) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Running ${(project.hoursLogged - project.hoursNeeded).fmt()}h over estimate",
-                        style = MaterialTheme.typography.bodySmall, color = AccentRed
-                    )
+                    InfoChip("⏱ est. ${project.hoursNeeded.fmt()}h")
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(
-                    onClick = onLogHours,
+                    onClick = onMarkDone,
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
-                    Text("Log hours", fontFamily = InterFamily, fontSize = 12.sp, color = AccentBlue)
+                    Text("Mark as done", fontFamily = InterFamily, fontSize = 12.sp, color = AccentGreen)
                 }
             }
         }
     }
 }
 
-/** Dialog for entering how many hours have actually been worked on a project so far. */
+/**
+ * Shown the instant a project is checked off. Asks how many hours it
+ * actually took — that single number is what determines ahead/behind.
+ */
 @Composable
-private fun LogHoursDialog(
+private fun CompleteProjectDialog(
     project: Project,
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
-    var hours by remember { mutableStateOf(if (project.hoursLogged > 0.0) project.hoursLogged.fmt() else "") }
+    var hours by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Log hours — ${project.name}") },
+        title = { Text("Finish — ${project.name}") },
         text = {
             Column {
                 Text(
-                    "Originally estimated at ${project.hoursNeeded.fmt()}h. How many hours " +
-                            "have you actually worked so far?",
+                    "This was estimated at ${project.hoursNeeded.fmt()}h. How many hours did " +
+                            "it actually take you?",
                     style = MaterialTheme.typography.bodySmall, color = SlateDeep
                 )
                 Spacer(Modifier.height(10.dp))
                 DialogField(
-                    "Hours worked", hours,
+                    "Actual hours", hours,
                     onValueChange = { hours = it; error = false },
                     keyboardType = KeyboardType.Decimal,
                     isError = error,
@@ -304,9 +251,9 @@ private fun LogHoursDialog(
         confirmButton = {
             TextButton(onClick = {
                 val parsed = hours.toDoubleOrNull()
-                if (parsed == null || parsed < 0) { error = true; return@TextButton }
+                if (parsed == null || parsed <= 0) { error = true; return@TextButton }
                 onConfirm(parsed)
-            }) { Text("Save", color = AccentBlue) }
+            }) { Text("Done", color = AccentGreen) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel", color = SlateDeep) }
@@ -317,7 +264,7 @@ private fun LogHoursDialog(
 /**
  * Dialog for granting a one-time capacity boost to a specific day to help
  * catch up on overrun hours. The chosen boost only applies to that single
- * date for this reschedule — it does not change the user's default daily cap.
+ * date for this reschedule — it does not change the user's weekly schedule.
  */
 @Composable
 private fun CatchUpDialog(
@@ -333,12 +280,12 @@ private fun CatchUpDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Catch up on ${hoursOver.fmt()}h") },
+        title = { Text("You're ${hoursOver.fmt()}h behind") },
         text = {
             Column {
                 Text(
-                    "Pick a day you're free to take on extra hours. This boost applies " +
-                            "once, just for that day.",
+                    "That took longer than estimated. Pick a day you're free to take on " +
+                            "extra hours to help catch up — this boost applies once, just for that day.",
                     style = MaterialTheme.typography.bodySmall, color = SlateDeep
                 )
                 Spacer(Modifier.height(10.dp))

@@ -2,6 +2,7 @@ package com.grp8.freelance
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,7 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grp8.freelance.ui.theme.*
-import java.time.LocalTime
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * PHASE 1 — Optimizer.
@@ -40,7 +43,7 @@ fun OptimizerScreen(
 ) {
     val allProjects by viewModel.allProjects.collectAsStateWithLifecycle()
     val potential = allProjects.filter { it.status == ProjectStatus.POTENTIAL }
-    val dailyCap by viewModel.dailyCap.collectAsStateWithLifecycle()
+    val weeklySchedule by viewModel.weeklySchedule.collectAsStateWithLifecycle()
 
     var showAddDialog  by remember { mutableStateOf(false) }
     var editingProject by remember { mutableStateOf<Project?>(null) }
@@ -137,7 +140,13 @@ fun OptimizerScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            item { CapacityCard(dailyCap, onChange = { viewModel.setDailyCap(it) }) }
+            item {
+                WeeklyScheduleCard(
+                    weekDates = viewModel.currentWeekDates(),
+                    schedule  = weeklySchedule,
+                    onChange  = { viewModel.setWeeklySchedule(it) }
+                )
+            }
 
             item {
                 Spacer(Modifier.height(4.dp))
@@ -170,19 +179,20 @@ fun OptimizerScreen(
     }
 }
 
+/**
+ * "Set Weekly Schedule" — the user picks which days THIS week they're
+ * dedicating time to work, and how many hours each. Unselected days fall
+ * back to a small emergency capacity rather than zero, since unplanned free
+ * time still happens. This only applies to the current week; next week needs
+ * to be set again.
+ */
 @Composable
-fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
-    // Recompute every minute so the banner stays accurate without a restart.
-    var currentTime by remember { mutableStateOf(LocalTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(60_000L)
-            currentTime = LocalTime.now()
-        }
-    }
-
-    val todayEffective = Scheduler.todayRemainingHours(value)
-    val todayIsReduced = todayEffective < value
+fun WeeklyScheduleCard(
+    weekDates: List<LocalDate>,
+    schedule: Map<LocalDate, Double>,
+    onChange: (Map<LocalDate, Double>) -> Unit
+) {
+    val today = LocalDate.now()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -191,103 +201,114 @@ fun CapacityCard(value: Double, onChange: (Double) -> Unit) {
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column {
-                    Text("Daily Capacity", style = MaterialTheme.typography.titleMedium, color = Ink)
-                    Text("Working hours per day", style = MaterialTheme.typography.bodySmall,
-                        color = SlateDeep)
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(AccentBlue)
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        "${value.toInt()} hrs",
-                        color = White,
-                        fontFamily = InterFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-            }
-
+            Text("Weekly Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(
+                "Pick the days you're working this week, and how many hours.",
+                style = MaterialTheme.typography.bodySmall, color = SlateDeep
+            )
             Spacer(Modifier.height(14.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (h in 1..16) {
-                    val active = h <= value.toInt()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(if (active) 10.dp else 6.dp)
-                            .clip(CircleShape)
-                            .background(if (active) AccentBlue else SlateMid)
-                    )
-                }
-            }
+            weekDates.forEach { date ->
+                val isSelected = schedule.containsKey(date)
+                val hours      = schedule[date] ?: 0.0
+                val isPast     = date.isBefore(today)
 
-            Spacer(Modifier.height(10.dp))
-
-            Slider(
-                value = value.toFloat(),
-                onValueChange = { onChange(it.toDouble()) },
-                valueRange = 1f..16f,
-                steps = 14,
-                modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = AccentBlue,
-                    activeTrackColor = Color.Transparent,
-                    inactiveTrackColor = Color.Transparent
-                )
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("1h", style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-                Text("16h", style = MaterialTheme.typography.bodySmall, color = SlateDeep)
-            }
-
-            if (todayIsReduced) {
-                Spacer(Modifier.height(10.dp))
-                val bannerText = if (todayEffective == 0.0) {
-                    "No time left today — projects will start from tomorrow."
-                } else {
-                    val h = todayEffective.toInt()
-                    val m = ((todayEffective - h) * 60).toInt()
-                    val timeStr = when {
-                        h > 0 && m > 0 -> "${h}h ${m}m"
-                        h > 0          -> "${h}h"
-                        else           -> "${m}m"
-                    }
-                    "Only $timeStr left today — projects needing more will be assigned from tomorrow."
-                }
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFFFF3CD))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "⏰  $bannerText",
-                        fontFamily = InterFamily,
-                        fontSize = 12.sp,
-                        color = Color(0xFF7A5C00)
-                    )
+                    // Day toggle chip
+                    Box(
+                        modifier = Modifier
+                            .width(56.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) AccentBlue else White)
+                            .let {
+                                if (!isPast) it.clickable {
+                                    val updated = schedule.toMutableMap()
+                                    if (isSelected) updated.remove(date) else updated[date] = 4.0
+                                    onChange(updated)
+                                } else it
+                            }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                                fontFamily = InterFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isSelected) White else if (isPast) SlateMid else Ink
+                            )
+                            Text(
+                                date.dayOfMonth.toString(),
+                                fontFamily = InterFamily,
+                                fontSize = 10.sp,
+                                color = if (isSelected) White else if (isPast) SlateMid else SlateDeep
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    if (isSelected) {
+                        // Hour stepper for a selected work day
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    val updated = schedule.toMutableMap()
+                                    updated[date] = (hours - 1.0).coerceAtLeast(1.0)
+                                    onChange(updated)
+                                },
+                                enabled = !isPast,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Text("–", fontSize = 18.sp, color = AccentBlue)
+                            }
+                            Text(
+                                "${hours.toInt()}h",
+                                fontFamily = InterFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = Ink,
+                                modifier = Modifier.width(36.dp)
+                            )
+                            IconButton(
+                                onClick = {
+                                    val updated = schedule.toMutableMap()
+                                    updated[date] = (hours + 1.0).coerceAtMost(16.0)
+                                    onChange(updated)
+                                },
+                                enabled = !isPast,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Text("+", fontSize = 18.sp, color = AccentBlue)
+                            }
+                        }
+                    } else {
+                        Text(
+                            if (isPast) "Already passed" else "Tap day to add hours",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlateDeep,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Days you don't pick fall back to ${UNSELECTED_DAY_FALLBACK_HOURS.toInt()}h, " +
+                        "for emergencies.",
+                style = MaterialTheme.typography.bodySmall,
+                color = SlateDeep
+            )
         }
     }
 }

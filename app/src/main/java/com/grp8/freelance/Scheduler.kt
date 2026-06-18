@@ -27,6 +27,12 @@ private class SearchState(
  * Algorithm: pre-sort by deadline, then backtrack over (assign-day / skip)
  * decisions for each project, keeping the highest-income complete assignment.
  *
+ * Capacity is supplied per calendar date via [weeklyCapacity] (the user's
+ * "set weekly schedule" picks, e.g. Mon 6h / Wed 4h / Fri 8h / others 1h
+ * fallback). Any date beyond what's explicitly provided — i.e. past the
+ * current week — falls back to [fallbackHours] so the search still has a
+ * horizon to schedule into for far-out deadlines.
+ *
  * Used in two modes:
  *  • Phase 1→2: [schedule] — optimize a fresh batch of POTENTIAL projects.
  *  • Phase 3:   [reschedule] — re-optimize only the still-unfinished SCHEDULED
@@ -35,16 +41,20 @@ private class SearchState(
  */
 object Scheduler {
 
-    fun schedule(projects: List<Project>, dailyCapHours: Double): ScheduleResult {
+    fun schedule(
+        projects: List<Project>,
+        weeklyCapacity: Map<LocalDate, Double>,
+        fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS
+    ): ScheduleResult {
         if (projects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val ordered = preSort(projects)
-        val state = SearchState(dayCapacity = buildCapacityMap(today, ordered, dailyCapHours))
+        val state = SearchState(dayCapacity = buildCapacityMap(today, ordered, weeklyCapacity, fallbackHours))
 
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, dailyCapHours, emptyMap())
+        return buildResult(today, ordered, state, weeklyCapacity, fallbackHours, emptyMap())
     }
 
     /**
@@ -57,24 +67,25 @@ object Scheduler {
      *
      * [capacityOverrides] lets the user grant a one-time capacity boost to a
      * specific future date (the "I'll work extra on Thursday to catch up" case)
-     * without permanently changing their daily cap.
+     * without permanently changing their weekly schedule.
      */
     fun reschedule(
         remainingProjects: List<Project>,
-        dailyCapHours: Double,
+        weeklyCapacity: Map<LocalDate, Double>,
+        fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS,
         capacityOverrides: Map<LocalDate, Double> = emptyMap()
     ): ScheduleResult {
         if (remainingProjects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val ordered = preSort(remainingProjects)
-        val baseCapacity = buildCapacityMap(today, ordered, dailyCapHours).toMutableMap()
+        val baseCapacity = buildCapacityMap(today, ordered, weeklyCapacity, fallbackHours).toMutableMap()
         capacityOverrides.forEach { (date, hours) -> baseCapacity[date] = hours }
 
         val state = SearchState(dayCapacity = baseCapacity)
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, dailyCapHours, capacityOverrides)
+        return buildResult(today, ordered, state, weeklyCapacity, fallbackHours, capacityOverrides)
     }
 
     // =========================================================================
@@ -189,11 +200,19 @@ object Scheduler {
         return if (effective < MIN_BOOKABLE_HOURS) 0.0 else effective
     }
 
-    /** Day → available-hours map spanning today through the latest deadline. */
+    /**
+     * Day → available-hours map spanning today through the latest deadline.
+     *
+     * For dates present in [weeklyCapacity] (the current week the user set up),
+     * that explicit value is used — with today additionally clamped by the
+     * real-time clock. For dates beyond that (future weeks, since the weekly
+     * schedule doesn't carry forward), [fallbackHours] is used instead.
+     */
     private fun buildCapacityMap(
         today: LocalDate,
         projects: List<Project>,
-        dailyCapHours: Double
+        weeklyCapacity: Map<LocalDate, Double>,
+        fallbackHours: Double
     ): MutableMap<LocalDate, Double> {
         val lastDeadline = projects.maxOf { it.deadlineDate }
         val totalDays    = ChronoUnit.DAYS.between(today, lastDeadline).toInt() + 1
@@ -201,7 +220,8 @@ object Scheduler {
         val map = mutableMapOf<LocalDate, Double>()
         var day = today
         repeat(totalDays) {
-            map[day] = if (day == today) todayRemainingHours(dailyCapHours) else dailyCapHours
+            val plannedHours = weeklyCapacity[day] ?: fallbackHours
+            map[day] = if (day == today) todayRemainingHours(plannedHours) else plannedHours
             day = day.plusDays(1)
         }
         return map
@@ -214,10 +234,11 @@ object Scheduler {
         today: LocalDate,
         projects: List<Project>,
         state: SearchState,
-        dailyCapHours: Double,
+        weeklyCapacity: Map<LocalDate, Double>,
+        fallbackHours: Double,
         capacityOverrides: Map<LocalDate, Double>
     ): ScheduleResult {
-        val finalCapacity = buildCapacityMap(today, projects, dailyCapHours)
+        val finalCapacity = buildCapacityMap(today, projects, weeklyCapacity, fallbackHours)
         capacityOverrides.forEach { (date, hours) -> finalCapacity[date] = hours }
         projects.forEachIndexed { i, proj ->
             state.bestAssignment[i]?.let { day ->
@@ -234,7 +255,12 @@ object Scheduler {
             if (day != null) {
                 accepted.add(ScheduledProject(proj, day))
             } else {
-                unscheduled.add(UnscheduledProject(proj, constraintReason(proj, today, dailyCapHours, finalCapacity)))
+                unscheduled.add(
+                    UnscheduledProject(
+                        proj,
+                        constraintReason(proj, today, weeklyCapacity, fallbackHours, finalCapacity)
+                    )
+                )
             }
         }
 
@@ -244,40 +270,55 @@ object Scheduler {
 
     /**
      * Explains *why* a potential project can't currently be accepted — phrased
-     * around the two real constraints (deadline, estimated hours) rather than
-     * generic rejection language.
+     * around the real constraints: deadline, estimated hours, and now also the
+     * specific days the user has dedicated to work this week.
      */
     private fun constraintReason(
         proj: Project,
         today: LocalDate,
-        dailyCapHours: Double,
+        weeklyCapacity: Map<LocalDate, Double>,
+        fallbackHours: Double,
         finalCapacity: Map<LocalDate, Double>
-    ): String = when {
-        proj.hoursNeeded > dailyCapHours -> {
-            val needed = proj.hoursNeeded.fmt()
-            val cap    = dailyCapHours.fmt()
-            "You can't accept this job — it needs ${needed}h in a single day, but your daily " +
-                    "capacity is only ${cap}h. Raise your daily cap to at least ${needed}h."
-        }
+    ): String {
+        val maxAnyDayCapacity = (weeklyCapacity.values + fallbackHours).maxOrNull() ?: fallbackHours
 
-        proj.deadlineDate.isBefore(today) -> {
-            "You can't accept this job — its deadline (${proj.deadlineDate.format(REASON_FMT)}) " +
-                    "has already passed. Update the deadline to a future date."
-        }
+        return when {
+            proj.hoursNeeded > maxAnyDayCapacity -> {
+                val needed = proj.hoursNeeded.fmt()
+                val cap    = maxAnyDayCapacity.fmt()
+                "You can't accept this job — it needs ${needed}h in a single day, but even your " +
+                        "busiest scheduled day only has ${cap}h. Increase that day's capacity in " +
+                        "your weekly schedule to at least ${needed}h."
+            }
 
-        else -> {
-            val earliestFreeSlot = finalCapacity.entries
-                .filter { (date, hours) -> !date.isBefore(today) && hours >= proj.hoursNeeded }
-                .minByOrNull { it.key }
-
-            if (earliestFreeSlot != null && earliestFreeSlot.key.isAfter(proj.deadlineDate)) {
+            proj.deadlineDate.isBefore(today) -> {
                 "You can't accept this job — its deadline (${proj.deadlineDate.format(REASON_FMT)}) " +
-                        "is too tight given your other commitments. The earliest open slot is " +
-                        "${earliestFreeSlot.key.format(REASON_FMT)}."
-            } else {
-                "You can't accept this job alongside your other potential projects — accepting it " +
-                        "would mean less total income than your current best combination. Try " +
-                        "raising your daily cap, or removing a lower-value project."
+                        "has already passed. Update the deadline to a future date."
+            }
+
+            else -> {
+                val earliestFreeSlot = finalCapacity.entries
+                    .filter { (date, hours) -> !date.isBefore(today) && hours >= proj.hoursNeeded }
+                    .minByOrNull { it.key }
+
+                val workingDaysInWeek = weeklyCapacity.values.count { it > UNSELECTED_DAY_FALLBACK_HOURS }
+
+                when {
+                    earliestFreeSlot != null && earliestFreeSlot.key.isAfter(proj.deadlineDate) -> {
+                        "You can't accept this job — its deadline (${proj.deadlineDate.format(REASON_FMT)}) " +
+                                "is too tight given your other commitments. The earliest open slot is " +
+                                "${earliestFreeSlot.key.format(REASON_FMT)}."
+                    }
+                    workingDaysInWeek == 0 -> {
+                        "You can't accept this job — you haven't dedicated any work days in your " +
+                                "weekly schedule yet. Set up your weekly schedule to fit this in."
+                    }
+                    else -> {
+                        "You can't accept this job alongside your other potential projects — accepting it " +
+                                "would mean less total income than your current best combination. Try " +
+                                "dedicating more hours to a work day, or removing a lower-value project."
+                    }
+                }
             }
         }
     }

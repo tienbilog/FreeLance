@@ -86,6 +86,16 @@ data class MonthlyIncomeSummary(
     val totalIncome: Double get() = entries.sumOf { it.amount }
 }
 
+// =============================================================================
+// WEEKLY SCHEDULE — per-day capacity for the current calendar week (Mon–Sun).
+//
+// Replaces a single flat daily cap: the user picks which days they're
+// dedicating time to work and how many hours each of those days, for *this*
+// week only. Days not explicitly selected fall back to a small emergency
+// capacity rather than zero, since unexpected free time still happens.
+// =============================================================================
+const val UNSELECTED_DAY_FALLBACK_HOURS = 1.0
+
 fun Int.formatted(): String = "%,d".format(this)
 fun Double.fmt(): String =
     if (this == this.toLong().toDouble()) this.toLong().toString() else "%.1f".format(this)
