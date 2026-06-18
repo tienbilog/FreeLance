@@ -7,10 +7,17 @@ import com.grp8.freelance.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.userProfileChangeRequest
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.FirebaseNetworkException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import android.util.Log
 
 /**
  * Wraps Firebase Auth with username-only sign-in.
@@ -24,6 +31,7 @@ import kotlinx.coroutines.tasks.await
 class AuthRepository {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val DEBUG_AUTH = true // Set to true to see raw Firebase errors in UI
 
     /** Emits the current user whenever auth state changes (null = signed out / guest). */
     val currentUserFlow: Flow<FirebaseUser?> = callbackFlow {
@@ -51,6 +59,7 @@ class AuthRepository {
             )?.await()
             null  // success
         } catch (e: Exception) {
+            Log.e("AuthRepository", "Sign-up failed", e)
             friendlyError(e)
         }
     }
@@ -65,6 +74,7 @@ class AuthRepository {
             auth.signInWithEmailAndPassword(email, password).await()
             null  // success
         } catch (e: Exception) {
+            Log.e("AuthRepository", "Sign-in failed", e)
             friendlyError(e)
         }
     }
@@ -73,18 +83,27 @@ class AuthRepository {
 
     // Converts a username to a stable internal email Firebase Auth will accept.
     private fun toEmail(username: String) =
-        "${username.trim().lowercase()}@freelance.internal"
+        "${username.trim().lowercase()}@freelanceapp.com"
 
     private fun friendlyError(e: Exception): String {
-        val msg = e.message ?: ""
-        return when {
-            "email address is already in use" in msg -> "That username is already taken."
-            "no user record"                  in msg -> "Username not found."
-            "password is invalid"             in msg -> "Incorrect password."
-            "badly formatted"                 in msg -> "Invalid username."
-            "least 6 characters"              in msg -> "Password must be at least 6 characters."
-            "network error"                   in msg -> "No internet connection."
-            else                                     -> "Something went wrong. Try again."
+        val userMessage = when (e) {
+            is FirebaseAuthUserCollisionException -> "That username is already taken."
+            is FirebaseAuthInvalidUserException -> "Username not found."
+            is FirebaseAuthInvalidCredentialsException -> "Incorrect password or invalid username format."
+            is FirebaseAuthWeakPasswordException -> "Password must be at least 6 characters."
+            is FirebaseNetworkException -> "No internet connection."
+            else -> "Something went wrong. Try again."
+        }
+
+        return if (DEBUG_AUTH) {
+            val debugInfo = if (e is FirebaseAuthException) {
+                "[DEBUG] Error Code: ${e.errorCode}\nMessage: ${e.message}"
+            } else {
+                "[DEBUG] ${e.message}"
+            }
+            "$debugInfo\n\n$userMessage"
+        } else {
+            userMessage
         }
     }
 }
