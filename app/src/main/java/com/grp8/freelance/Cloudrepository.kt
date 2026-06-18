@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
+import java.time.DayOfWeek
 
 /**
  * Persists a signed-in user's projects in Firestore.
@@ -22,6 +23,8 @@ class CloudRepository(private val uid: String) {
     private val db = FirebaseFirestore.getInstance()
     private val doc = db.collection("users").document(uid)
         .collection("data").document("projects")
+    private val scheduleDoc = db.collection("users").document(uid)
+        .collection("data").document("schedule")
 
     /** Real-time stream of the user's projects from Firestore. */
     val projectsFlow: Flow<List<Project>> = callbackFlow {
@@ -37,6 +40,21 @@ class CloudRepository(private val uid: String) {
     suspend fun save(projects: List<Project>) {
         val data = mapOf("list" to projects.map { it.toMap() })
         doc.set(data, SetOptions.merge()).await()
+    }
+
+    val scheduleFlow: Flow<Map<DayOfWeek, Double>> = callbackFlow {
+        val listener = scheduleDoc.addSnapshotListener { snapshot, _ ->
+            val raw = snapshot?.get("pattern")
+            @Suppress("UNCHECKED_CAST")
+            val maps = raw as? Map<String, Number> ?: emptyMap()
+            trySend(maps.mapKeys { runCatching { DayOfWeek.valueOf(it.key) }.getOrDefault(DayOfWeek.MONDAY) }.mapValues { it.value.toDouble() })
+        }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveSchedule(schedule: Map<DayOfWeek, Double>) {
+        val data = mapOf("pattern" to schedule.mapKeys { it.key.name })
+        scheduleDoc.set(data, SetOptions.merge()).await()
     }
 
     // -------------------------------------------------------------------------

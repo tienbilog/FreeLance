@@ -74,7 +74,7 @@ fun ScheduleScreen(
                     Icon(Icons.Default.PlayArrow, contentDescription = null,
                         modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Run Optimizer", fontFamily = InterFamily, fontWeight = FontWeight.SemiBold)
+                    Text("Recalculate Schedule", fontFamily = InterFamily, fontWeight = FontWeight.SemiBold)
                 }
             }
         } else {

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.DayOfWeek
 
 class SchedulerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -21,13 +22,14 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     private val localRepo  = ProjectRepository(application)
     private var cloudRepo: CloudRepository? = null
     private var collectJob: Job? = null
+    private var scheduleCollectJob: Job? = null
 
     /** The single source of truth — every project, regardless of phase/status. */
     private val _allProjects = MutableStateFlow<List<Project>>(emptyList())
     val allProjects: StateFlow<List<Project>> = _allProjects.asStateFlow()
 
-    private val _weeklySchedule = MutableStateFlow<Map<LocalDate, Double>>(emptyMap())
-    val weeklySchedule: StateFlow<Map<LocalDate, Double>> = _weeklySchedule.asStateFlow()
+    private val _weeklySchedule = MutableStateFlow<Map<DayOfWeek, Double>>(emptyMap())
+    val weeklySchedule: StateFlow<Map<DayOfWeek, Double>> = _weeklySchedule.asStateFlow()
 
     /** Phase 1→2 preview — populated by runOptimizer(), cleared by acceptSchedule()/discard. */
     private val _suggested = MutableStateFlow<ScheduleResult?>(null)
@@ -68,7 +70,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     /** The 7 dates (Mon–Sun) of the current calendar week, for the weekly schedule picker. */
     fun currentWeekDates(): List<LocalDate> {
         val today = LocalDate.now()
-        val monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        val monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         return (0..6).map { monday.plusDays(it.toLong()) }
     }
 
@@ -83,6 +85,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         )
         _allProjects.value += project
         persist()
+        runOptimizer()
     }
 
     fun updatePotentialProject(
@@ -97,31 +100,47 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
             ) else p
         }
         persist()
-        // If a suggestion is showing, it's now stale — clear it so the user re-runs.
-        _suggested.value = null
+        runOptimizer()
     }
 
     fun removePotentialProject(id: Int) {
         _allProjects.value = _allProjects.value.filter { it.id != id }
         persist()
-        _suggested.value = null
+        runOptimizer()
+    }
+
+    fun deleteAllProjects() {
+        _allProjects.value = emptyList()
+        persist()
+        runOptimizer()
     }
 
     /**
      * Sets which days this week the user is dedicating time to work, and how
      * many hours each. Days not included fall back to a small emergency
      * capacity ([UNSELECTED_DAY_FALLBACK_HOURS]) rather than zero.
-     * Applies only to the current calendar week — must be re-set each week.
      */
-    fun setWeeklySchedule(dayHours: Map<LocalDate, Double>) {
+    fun setWeeklySchedule(dayHours: Map<DayOfWeek, Double>) {
         _weeklySchedule.value = dayHours.mapValues { (_, h) -> h.coerceIn(0.0, 16.0) }
+    }
+
+    fun saveWeeklySchedule(dayHours: Map<DayOfWeek, Double>) {
+        setWeeklySchedule(dayHours)
+        viewModelScope.launch {
+            cloudRepo?.saveSchedule(_weeklySchedule.value) ?: localRepo.saveSchedule(_weeklySchedule.value)
+        }
+        runOptimizer()
     }
 
     // =========================================================================
     // PHASE 1 → 2 — run the optimizer on potential projects (preview only)
     // =========================================================================
     fun runOptimizer() {
-        _suggested.value = Scheduler.schedule(potentialProjects, _weeklySchedule.value)
+        if (potentialProjects.isEmpty()) {
+            _suggested.value = null
+        } else {
+            _suggested.value = Scheduler.schedule(potentialProjects, _weeklySchedule.value)
+        }
     }
 
     fun discardSuggestion() { _suggested.value = null }
@@ -223,16 +242,30 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         doneProjects.mapNotNull { it.completedDate?.let { d -> YearMonth.from(d) } }
             .distinct().sortedDescending()
 
+    fun deleteAllIncomeRecords() {
+        _allProjects.value = _allProjects.value.filter { it.status != ProjectStatus.DONE }
+        persist()
+    }
+
     // =========================================================================
     // Private helpers
     // =========================================================================
     private fun collectFrom(local: Boolean) {
         collectJob?.cancel()
-        val flow = if (local) localRepo.projectsFlow else cloudRepo!!.projectsFlow
+        scheduleCollectJob?.cancel()
+        
+        val projectFlow = if (local) localRepo.projectsFlow else cloudRepo!!.projectsFlow
         collectJob = viewModelScope.launch {
-            flow.collect { saved ->
+            projectFlow.collect { saved ->
                 _allProjects.value = saved
                 idCtr = (saved.maxOfOrNull { it.id } ?: 0) + 1
+            }
+        }
+        
+        val schedFlow = if (local) localRepo.scheduleFlow else cloudRepo!!.scheduleFlow
+        scheduleCollectJob = viewModelScope.launch {
+            schedFlow.collect { savedSched ->
+                _weeklySchedule.value = savedSched
             }
         }
     }
@@ -248,6 +281,11 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         if (guestProjects.isNotEmpty()) {
             repo.save(guestProjects)
             localRepo.save(emptyList())
+        }
+        val guestSchedule = localRepo.loadSchedule()
+        if (guestSchedule.isNotEmpty()) {
+            repo.saveSchedule(guestSchedule)
+            localRepo.saveSchedule(emptyMap())
         }
     }
 }

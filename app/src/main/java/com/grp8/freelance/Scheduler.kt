@@ -2,6 +2,7 @@ package com.grp8.freelance
 
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
@@ -43,7 +44,7 @@ object Scheduler {
 
     fun schedule(
         projects: List<Project>,
-        weeklyCapacity: Map<LocalDate, Double>,
+        weeklyCapacity: Map<DayOfWeek, Double>,
         fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS
     ): ScheduleResult {
         if (projects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
@@ -71,7 +72,7 @@ object Scheduler {
      */
     fun reschedule(
         remainingProjects: List<Project>,
-        weeklyCapacity: Map<LocalDate, Double>,
+        weeklyCapacity: Map<DayOfWeek, Double>,
         fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS,
         capacityOverrides: Map<LocalDate, Double> = emptyMap()
     ): ScheduleResult {
@@ -257,7 +258,7 @@ object Scheduler {
     private fun buildCapacityMap(
         today: LocalDate,
         projects: List<Project>,
-        weeklyCapacity: Map<LocalDate, Double>,
+        weeklyCapacity: Map<DayOfWeek, Double>,
         fallbackHours: Double
     ): MutableMap<LocalDate, Double> {
         val lastDeadline = projects.maxOf { it.deadlineDate }
@@ -266,7 +267,7 @@ object Scheduler {
         val map = mutableMapOf<LocalDate, Double>()
         var day = today
         repeat(totalDays) {
-            val plannedHours = weeklyCapacity[day] ?: fallbackHours
+            val plannedHours = weeklyCapacity[day.dayOfWeek] ?: fallbackHours
             map[day] = if (day == today) todayRemainingHours(plannedHours) else plannedHours
             day = day.plusDays(1)
         }
@@ -280,7 +281,7 @@ object Scheduler {
         today: LocalDate,
         projects: List<Project>,
         state: SearchState,
-        weeklyCapacity: Map<LocalDate, Double>,
+        weeklyCapacity: Map<DayOfWeek, Double>,
         fallbackHours: Double,
         capacityOverrides: Map<LocalDate, Double>
     ): ScheduleResult {
@@ -324,7 +325,7 @@ object Scheduler {
     private fun constraintReason(
         proj: Project,
         today: LocalDate,
-        weeklyCapacity: Map<LocalDate, Double>,
+        weeklyCapacity: Map<DayOfWeek, Double>,
         fallbackHours: Double,
         finalCapacity: Map<LocalDate, Double>
     ): String {

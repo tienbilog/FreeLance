@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grp8.freelance.ui.theme.*
 import java.time.LocalDate
+import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -142,9 +143,9 @@ fun OptimizerScreen(
 
             item {
                 WeeklyScheduleCard(
-                    weekDates = viewModel.currentWeekDates(),
                     schedule  = weeklySchedule,
-                    onChange  = { viewModel.setWeeklySchedule(it) }
+                    onChange  = { viewModel.setWeeklySchedule(it) },
+                    onSave    = { viewModel.saveWeeklySchedule(weeklySchedule) }
                 )
             }
 
@@ -175,25 +176,51 @@ fun OptimizerScreen(
             item {
                 AddProjectButton(compact = potential.isNotEmpty(), onClick = { showAddDialog = true })
             }
+
+            item {
+                var showDeleteAllDialog by remember { mutableStateOf(false) }
+                if (allProjects.isNotEmpty()) {
+                    Spacer(Modifier.height(24.dp))
+                    TextButton(
+                        onClick = { showDeleteAllDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete All Projects", color = AccentRed, fontFamily = InterFamily, fontWeight = FontWeight.Medium)
+                    }
+                }
+                if (showDeleteAllDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteAllDialog = false },
+                        title = { Text("Delete all projects?") },
+                        text = { Text("This action cannot be undone. All schedules and assignments will be cleared.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showDeleteAllDialog = false
+                                viewModel.deleteAllProjects()
+                            }) { Text("Delete", color = AccentRed) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel", color = SlateDeep) }
+                        }
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * "Set Weekly Schedule" — the user picks which days THIS week they're
+ * "Set Weekly Schedule" — the user picks which days of the week they're
  * dedicating time to work, and how many hours each. Unselected days fall
  * back to a small emergency capacity rather than zero, since unplanned free
- * time still happens. This only applies to the current week; next week needs
- * to be set again.
+ * time still happens. This pattern repeats for all future weeks.
  */
 @Composable
 fun WeeklyScheduleCard(
-    weekDates: List<LocalDate>,
-    schedule: Map<LocalDate, Double>,
-    onChange: (Map<LocalDate, Double>) -> Unit
+    schedule: Map<DayOfWeek, Double>,
+    onChange: (Map<DayOfWeek, Double>) -> Unit,
+    onSave: () -> Unit
 ) {
-    val today = LocalDate.now()
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -203,15 +230,14 @@ fun WeeklyScheduleCard(
         Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
             Text("Weekly Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
             Text(
-                "Pick the days you're working this week, and how many hours.",
+                "Pick the days you're working each week, and how many hours. This repeats for future weeks.",
                 style = MaterialTheme.typography.bodySmall, color = SlateDeep
             )
             Spacer(Modifier.height(14.dp))
 
-            weekDates.forEach { date ->
-                val isSelected = schedule.containsKey(date)
-                val hours      = schedule[date] ?: 0.0
-                val isPast     = date.isBefore(today)
+            DayOfWeek.values().forEach { dayOfWeek ->
+                val isSelected = schedule.containsKey(dayOfWeek)
+                val hours      = schedule[dayOfWeek] ?: 0.0
 
                 Row(
                     modifier = Modifier
@@ -225,31 +251,21 @@ fun WeeklyScheduleCard(
                             .width(56.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) AccentBlue else White)
-                            .let {
-                                if (!isPast) it.clickable {
-                                    val updated = schedule.toMutableMap()
-                                    if (isSelected) updated.remove(date) else updated[date] = 4.0
-                                    onChange(updated)
-                                } else it
+                            .clickable {
+                                val updated = schedule.toMutableMap()
+                                if (isSelected) updated.remove(dayOfWeek) else updated[dayOfWeek] = 4.0
+                                onChange(updated)
                             }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
-                                fontFamily = InterFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isSelected) White else if (isPast) SlateMid else Ink
-                            )
-                            Text(
-                                date.dayOfMonth.toString(),
-                                fontFamily = InterFamily,
-                                fontSize = 10.sp,
-                                color = if (isSelected) White else if (isPast) SlateMid else SlateDeep
-                            )
-                        }
+                        Text(
+                            dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                            fontFamily = InterFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isSelected) White else Ink
+                        )
                     }
 
                     Spacer(Modifier.width(12.dp))
@@ -263,10 +279,9 @@ fun WeeklyScheduleCard(
                             IconButton(
                                 onClick = {
                                     val updated = schedule.toMutableMap()
-                                    updated[date] = (hours - 1.0).coerceAtLeast(1.0)
+                                    updated[dayOfWeek] = (hours - 1.0).coerceAtLeast(1.0)
                                     onChange(updated)
                                 },
-                                enabled = !isPast,
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Text("–", fontSize = 18.sp, color = AccentBlue)
@@ -282,10 +297,9 @@ fun WeeklyScheduleCard(
                             IconButton(
                                 onClick = {
                                     val updated = schedule.toMutableMap()
-                                    updated[date] = (hours + 1.0).coerceAtMost(16.0)
+                                    updated[dayOfWeek] = (hours + 1.0).coerceAtMost(16.0)
                                     onChange(updated)
                                 },
-                                enabled = !isPast,
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Text("+", fontSize = 18.sp, color = AccentBlue)
@@ -293,7 +307,7 @@ fun WeeklyScheduleCard(
                         }
                     } else {
                         Text(
-                            if (isPast) "Already passed" else "Tap day to add hours",
+                            "Tap day to add hours",
                             style = MaterialTheme.typography.bodySmall,
                             color = SlateDeep,
                             modifier = Modifier.weight(1f)
@@ -302,13 +316,22 @@ fun WeeklyScheduleCard(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 "Days you don't pick fall back to ${UNSELECTED_DAY_FALLBACK_HOURS.toInt()}h, " +
                         "for emergencies.",
                 style = MaterialTheme.typography.bodySmall,
                 color = SlateDeep
             )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Save Capacity Settings", fontFamily = InterFamily, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }

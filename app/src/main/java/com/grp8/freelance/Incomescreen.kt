@@ -176,6 +176,35 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                     }
                 }
             }
+
+            item {
+                var showDeleteAllDialog by remember { mutableStateOf(false) }
+                if (done.isNotEmpty()) {
+                    Spacer(Modifier.height(24.dp))
+                    TextButton(
+                        onClick = { showDeleteAllDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete All Income Records", color = AccentRed, fontFamily = InterFamily, fontWeight = FontWeight.Medium)
+                    }
+                }
+                if (showDeleteAllDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteAllDialog = false },
+                        title = { Text("Delete all income records?") },
+                        text = { Text("This action cannot be undone. All income data will be permanently removed.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showDeleteAllDialog = false
+                                viewModel.deleteAllIncomeRecords()
+                            }) { Text("Delete", color = AccentRed) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel", color = SlateDeep) }
+                        }
+                    )
+                }
+            }
         }
     }
 }
