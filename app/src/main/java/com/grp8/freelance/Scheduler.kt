@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 private val REASON_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MMM d")
-private const val MIN_BOOKABLE_HOURS = 0.5   // treat near-midnight slivers as zero capacity
+private const val MIN_BOOKABLE_HOURS = 1.0   // minimum allocatable block of time
 
 /**
  * Holds everything the backtracking search needs to mutate as it explores
@@ -154,7 +154,7 @@ object Scheduler {
         var day = today
         while (!day.isAfter(project.deadlineDate)) {
             val capacity = state.dayCapacity[day] ?: 0.0
-            if (capacity > 0.0) days.add(day)
+            if (capacity >= MIN_BOOKABLE_HOURS) days.add(day)
             day = day.plusDays(1)
         }
         return days
@@ -187,11 +187,18 @@ object Scheduler {
             val day = days[index]
             val cap = state.dayCapacity[day] ?: 0.0
 
-            if (cap > 0) {
-                val allocated = minOf(cap, remaining)
-                currentAlloc[day] = allocated
-                search(index + 1, remaining - allocated, currentAlloc)
-                currentAlloc.remove(day)
+            if (cap >= MIN_BOOKABLE_HOURS) {
+                var allocated = minOf(cap, remaining)
+                val leftover = remaining - allocated
+                if (leftover > 0.0 && leftover < MIN_BOOKABLE_HOURS) {
+                    allocated = remaining - MIN_BOOKABLE_HOURS
+                }
+
+                if (allocated >= MIN_BOOKABLE_HOURS) {
+                    currentAlloc[day] = allocated
+                    search(index + 1, remaining - allocated, currentAlloc)
+                    currentAlloc.remove(day)
+                }
             }
 
             search(index + 1, remaining, currentAlloc)
