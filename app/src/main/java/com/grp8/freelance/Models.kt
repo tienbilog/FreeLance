@@ -39,7 +39,9 @@ data class Project(
     val hoursLogged: Double = 0.0,            // actual hours worked so far (Phase 3)
     val completedDate: LocalDate? = null,     // set once marked done (Phase 3 → 4)
     val subtasks: List<Subtask> = emptyList(),
-    val taskStatus: TaskStatus = TaskStatus.NOT_STARTED
+    val taskStatus: TaskStatus = TaskStatus.NOT_STARTED,
+    val scheduleWarning: String? = null,      // explicitly warns if not fully scheduled
+    val completedAssignments: Set<LocalDate> = emptySet()
 ) {
     /** Total income this project earns, regardless of rate type. */
     val totalIncome: Double get() = when (rateType) {
@@ -113,11 +115,8 @@ data class MonthlyIncomeSummary(
 // WEEKLY SCHEDULE — per-day capacity for the current calendar week (Mon–Sun).
 //
 // Replaces a single flat daily cap: the user picks which days they're
-// dedicating time to work and how many hours each of those days, for *this*
-// week only. Days not explicitly selected fall back to a small emergency
-// capacity rather than zero, since unexpected free time still happens.
+// dedicating time to work and how many hours each of those days.
 // =============================================================================
-const val UNSELECTED_DAY_FALLBACK_HOURS = 1.0
 
 fun Int.formatted(): String = "%,d".format(this)
 fun Double.fmt(): String =

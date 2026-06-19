@@ -181,10 +181,11 @@ fun WeeklyScheduleCard(
     onChange: (Map<DayOfWeek, Double>) -> Unit,
     onSave: (Map<DayOfWeek, Double>) -> Unit
 ) {
-    val daysOfWeek = listOf(
-        DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY,
-        DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY
-    )
+    val todayDayOfWeek = LocalDate.now().dayOfWeek
+    val allDays = DayOfWeek.values()
+    val daysOfWeek = (0..6).map { i ->
+        allDays[(todayDayOfWeek.ordinal + i) % 7]
+    }
     
     var selectedDay by remember { mutableStateOf(daysOfWeek.first()) }
     var showEditDialog by remember { mutableStateOf(false) }

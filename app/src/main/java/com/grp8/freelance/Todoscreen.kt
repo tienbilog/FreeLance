@@ -38,20 +38,21 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
     val scheduled = allProjects.filter { it.status == ProjectStatus.SCHEDULED }
     val pace by viewModel.paceStatus.collectAsStateWithLifecycle()
 
-    var completingProject by remember { mutableStateOf<Project?>(null) }
+    var completingAssignment by remember { mutableStateOf<Pair<Project, LocalDate>?>(null) }
     var showCatchUpFor     by remember { mutableStateOf<PaceStatus.Behind?>(null) }
 
     LaunchedEffect(pace) {
         if (pace is PaceStatus.Behind) showCatchUpFor = pace as PaceStatus.Behind
     }
 
-    completingProject?.let { proj ->
-        CompleteProjectDialog(
+    completingAssignment?.let { (proj, date) ->
+        CompleteAssignmentDialog(
             project = proj,
-            onDismiss = { completingProject = null },
+            date = date,
+            onDismiss = { completingAssignment = null },
             onConfirm = { actualHours ->
-                viewModel.completeProject(proj.id, actualHours)
-                completingProject = null
+                viewModel.completeAssignment(proj.id, date, actualHours)
+                completingAssignment = null
             }
         )
     }
@@ -114,6 +115,27 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 }
             }
 
+            val stalledProjects = scheduled.filter { it.assignedDates.isEmpty() && it.taskStatus != TaskStatus.COMPLETED }
+
+            if (stalledProjects.isNotEmpty()) {
+                item {
+                    Text(
+                        "Needs Attention",
+                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+                items(stalledProjects, key = { "stalled_${it.id}" }) { project ->
+                    ToDoCard(
+                        project = project,
+                        date = LocalDate.now(),
+                        hoursForDay = 0.0,
+                        viewModel = viewModel,
+                        onMarkDone = { completingAssignment = project to LocalDate.now() }
+                    )
+                }
+            }
+
             val flattened = scheduled.flatMap { proj ->
                 proj.assignedDates.map { (date, hours) -> date to Pair(proj, hours) }
             }
@@ -130,9 +152,10 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 items(byDate[date]!!, key = { "${date}_${it.first.id}" }) { (project, hoursForDay) ->
                     ToDoCard(
                         project = project,
+                        date = date,
                         hoursForDay = hoursForDay,
                         viewModel = viewModel,
-                        onMarkDone = { completingProject = project }
+                        onMarkDone = { completingAssignment = project to date }
                     )
                 }
             }
@@ -185,6 +208,7 @@ fun DashboardSummaryCard(total: Int, ongoing: Int, completed: Int, progress: Flo
 @Composable
 private fun ToDoCard(
     project: Project,
+    date: LocalDate,
     hoursForDay: Double,
     viewModel: SchedulerViewModel,
     onMarkDone: () -> Unit
@@ -198,6 +222,8 @@ private fun ToDoCard(
         TaskStatus.COMPLETED -> MaterialTheme.colorScheme.secondary
     }
 
+    val isAssignmentComplete = project.completedAssignments.contains(date)
+
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         shape = RoundedCornerShape(32.dp),
@@ -206,11 +232,11 @@ private fun ToDoCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.Top) {
-                IconButton(onClick = onMarkDone, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onMarkDone, modifier = Modifier.size(32.dp), enabled = !isAssignmentComplete) {
                     Icon(
-                        if (project.taskStatus == TaskStatus.COMPLETED) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        if (isAssignmentComplete) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                         contentDescription = "Mark done",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = if (isAssignmentComplete) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
                     )
                 }
                 Spacer(Modifier.width(6.dp))
@@ -231,6 +257,23 @@ private fun ToDoCard(
                         }
                     }
                     Text(project.clientName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    
+                    if (project.scheduleWarning != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.errorContainer)
+                                .padding(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Text("⚠", color = MaterialTheme.colorScheme.error, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+                                Text(project.scheduleWarning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                    
                     Spacer(Modifier.height(8.dp))
                     
                     // Progress Bar
@@ -352,8 +395,9 @@ private fun AheadBanner(hoursSaved: Double, onMoveUp: () -> Unit, onDismiss: () 
 }
 
 @Composable
-private fun CompleteProjectDialog(
+private fun CompleteAssignmentDialog(
     project: Project,
+    date: LocalDate,
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
@@ -365,8 +409,9 @@ private fun CompleteProjectDialog(
         title = { Text("Finish — ${project.name}") },
         text = {
             Column {
+                val scheduledHours = project.assignedDates[date] ?: 0.0
                 Text(
-                    "This was estimated at ${project.hoursNeeded.fmt()}h. How many hours did " +
+                    "This was scheduled for ${scheduledHours.fmt()}h today. How many hours did " +
                             "it actually take you?",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

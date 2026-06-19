@@ -88,7 +88,8 @@ class ProjectRepository(private val context: Context) {
         val status: String,
         val assignedDates: Map<String, Double>?,
         val hoursLogged: Double,
-        val completedDate: String?
+        val completedDate: String?,
+        val completedAssignments: List<String>?
     )
 
     private fun Project.toJson() = ProjectJson(
@@ -103,7 +104,8 @@ class ProjectRepository(private val context: Context) {
         status        = status.name,
         assignedDates = if (assignedDates.isEmpty()) null else assignedDates.mapKeys { it.key.toString() },
         hoursLogged   = hoursLogged,
-        completedDate = completedDate?.toString()
+        completedDate = completedDate?.toString(),
+        completedAssignments = if (completedAssignments.isEmpty()) null else completedAssignments.map { it.toString() }
     )
 
     private fun ProjectJson.toProject() = Project(
@@ -118,6 +120,7 @@ class ProjectRepository(private val context: Context) {
         status        = runCatching { ProjectStatus.valueOf(status) }.getOrDefault(ProjectStatus.POTENTIAL),
         assignedDates = assignedDates?.mapKeys { LocalDate.parse(it.key) } ?: emptyMap(),
         hoursLogged   = hoursLogged,
-        completedDate = completedDate?.let { LocalDate.parse(it) }
+        completedDate = completedDate?.let { LocalDate.parse(it) },
+        completedAssignments = completedAssignments?.map { LocalDate.parse(it) }?.toSet() ?: emptySet()
     )
 }

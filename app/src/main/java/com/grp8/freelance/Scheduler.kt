@@ -9,11 +9,6 @@ import java.time.temporal.ChronoUnit
 private val REASON_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MMM d")
 private const val MIN_BOOKABLE_HOURS = 1.0   // minimum allocatable block of time
 
-/**
- * Holds everything the backtracking search needs to mutate as it explores
- * assignments. Passed by reference instead of being closed over, so the
- * recursion in [Scheduler.backtrack] stays a pure function of its parameters.
- */
 private class SearchState(
     val dayCapacity: MutableMap<LocalDate, Double>
 ) {
@@ -44,18 +39,17 @@ object Scheduler {
 
     fun schedule(
         projects: List<Project>,
-        weeklyCapacity: Map<DayOfWeek, Double>,
-        fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS
+        weeklyCapacity: Map<DayOfWeek, Double>
     ): ScheduleResult {
         if (projects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val ordered = preSort(projects)
-        val state = SearchState(dayCapacity = buildCapacityMap(today, ordered, weeklyCapacity, fallbackHours))
+        val state = SearchState(dayCapacity = buildCapacityMap(today, ordered, weeklyCapacity))
 
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, weeklyCapacity, fallbackHours, emptyMap())
+        return buildResult(today, ordered, state, weeklyCapacity, emptyMap())
     }
 
     /**
@@ -73,28 +67,23 @@ object Scheduler {
     fun reschedule(
         remainingProjects: List<Project>,
         weeklyCapacity: Map<DayOfWeek, Double>,
-        fallbackHours: Double = UNSELECTED_DAY_FALLBACK_HOURS,
         capacityOverrides: Map<LocalDate, Double> = emptyMap()
     ): ScheduleResult {
         if (remainingProjects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val ordered = preSort(remainingProjects)
-        val baseCapacity = buildCapacityMap(today, ordered, weeklyCapacity, fallbackHours).toMutableMap()
+        val baseCapacity = buildCapacityMap(today, ordered, weeklyCapacity).toMutableMap()
         capacityOverrides.forEach { (date, hours) -> baseCapacity[date] = hours }
 
         val state = SearchState(dayCapacity = baseCapacity)
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, weeklyCapacity, fallbackHours, capacityOverrides)
+        return buildResult(today, ordered, state, weeklyCapacity, capacityOverrides)
     }
 
-    // =========================================================================
-    // STEP 1 — PRE-SORT
-    //
-    // Earliest-deadline-first. Visiting tight-deadline projects first lets the
-    // backtracker discover infeasible branches sooner, pruning the search tree.
-    // =========================================================================
+    // presorting algo implemented first by project deadlines to allow backtracking algorithm
+    // to discover not feasible branches sooner, pruning in the process
     private fun preSort(projects: List<Project>): List<Project> =
         projects.sortedBy { it.deadlineDate }
 
@@ -256,17 +245,11 @@ object Scheduler {
 
     /**
      * Day → available-hours map spanning today through the latest deadline.
-     *
-     * For dates present in [weeklyCapacity] (the current week the user set up),
-     * that explicit value is used — with today additionally clamped by the
-     * real-time clock. For dates beyond that (future weeks, since the weekly
-     * schedule doesn't carry forward), [fallbackHours] is used instead.
      */
     private fun buildCapacityMap(
         today: LocalDate,
         projects: List<Project>,
-        weeklyCapacity: Map<DayOfWeek, Double>,
-        fallbackHours: Double
+        weeklyCapacity: Map<DayOfWeek, Double>
     ): MutableMap<LocalDate, Double> {
         val lastDeadline = projects.maxOf { it.deadlineDate }
         val totalDays    = ChronoUnit.DAYS.between(today, lastDeadline).toInt() + 1
@@ -274,7 +257,7 @@ object Scheduler {
         val map = mutableMapOf<LocalDate, Double>()
         var day = today
         repeat(totalDays) {
-            val plannedHours = weeklyCapacity[day.dayOfWeek] ?: fallbackHours
+            val plannedHours = weeklyCapacity[day.dayOfWeek] ?: 0.0
             map[day] = if (day == today) todayRemainingHours(plannedHours) else plannedHours
             day = day.plusDays(1)
         }
@@ -289,10 +272,9 @@ object Scheduler {
         projects: List<Project>,
         state: SearchState,
         weeklyCapacity: Map<DayOfWeek, Double>,
-        fallbackHours: Double,
         capacityOverrides: Map<LocalDate, Double>
     ): ScheduleResult {
-        val finalCapacity = buildCapacityMap(today, projects, weeklyCapacity, fallbackHours)
+        val finalCapacity = buildCapacityMap(today, projects, weeklyCapacity)
         capacityOverrides.forEach { (date, hours) -> finalCapacity[date] = hours }
         projects.forEachIndexed { i, _ ->
             val alloc = state.bestAssignment[i]
@@ -311,12 +293,36 @@ object Scheduler {
             if (alloc != null && alloc.isNotEmpty()) {
                 accepted.add(ScheduledProject(proj, alloc))
             } else {
-                unscheduled.add(
-                    UnscheduledProject(
-                        proj,
-                        constraintReason(proj, today, weeklyCapacity, fallbackHours, finalCapacity)
+                val partialAlloc = mutableMapOf<LocalDate, Double>()
+                var remaining = effectiveHours(proj)
+                var day = today
+                while (remaining > 0.0 && !day.isAfter(proj.deadlineDate)) {
+                    val cap = finalCapacity[day] ?: 0.0
+                    if (cap >= MIN_BOOKABLE_HOURS) {
+                        var allocated = minOf(cap, remaining)
+                        val leftover = remaining - allocated
+                        if (leftover > 0.0 && leftover < MIN_BOOKABLE_HOURS) {
+                            allocated = remaining - MIN_BOOKABLE_HOURS
+                        }
+                        if (allocated >= MIN_BOOKABLE_HOURS) {
+                            partialAlloc[day] = allocated
+                            remaining -= allocated
+                            finalCapacity[day] = (finalCapacity[day] ?: 0.0) - allocated
+                        }
+                    }
+                    day = day.plusDays(1)
+                }
+
+                if (partialAlloc.isNotEmpty()) {
+                    accepted.add(ScheduledProject(proj, partialAlloc))
+                } else {
+                    unscheduled.add(
+                        UnscheduledProject(
+                            proj,
+                            constraintReason(proj, today, weeklyCapacity, finalCapacity)
+                        )
                     )
-                )
+                }
             }
         }
 
@@ -333,14 +339,13 @@ object Scheduler {
         proj: Project,
         today: LocalDate,
         weeklyCapacity: Map<DayOfWeek, Double>,
-        fallbackHours: Double,
         finalCapacity: Map<LocalDate, Double>
     ): String {
         if (proj.deadlineDate.isBefore(today)) {
             return "You can't accept this job — its deadline (${proj.deadlineDate.format(REASON_FMT)}) has already passed. Update the deadline to a future date."
         }
 
-        val workingDaysInWeek = weeklyCapacity.values.count { it > UNSELECTED_DAY_FALLBACK_HOURS }
+        val workingDaysInWeek = weeklyCapacity.values.count { it > 0.0 }
         if (workingDaysInWeek == 0) {
             return "You can't accept this job — you haven't dedicated any work days in your weekly schedule yet. Set up your weekly schedule to fit this in."
         }
