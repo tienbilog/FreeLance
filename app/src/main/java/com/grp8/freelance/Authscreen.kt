@@ -59,7 +59,7 @@ fun AuthScreen(
         ) {
             // App name / hero
             Text(
-                text = "FreeLance",
+                text = "PlanProfit",
                 fontFamily = InterFamily,
                 fontWeight = FontWeight.Bold,
                 fontSize = 36.sp,

@@ -46,7 +46,7 @@ enum class SlideTheme {
 
 val onboardingSlides = listOf(
     OnboardingSlide(
-        title = "Welcome to FreeLance",
+        title = "Welcome to PlanProfit",
         description = "Your all-in-one platform for managing freelance projects, schedules, and income effortlessly.",
         theme = SlideTheme.Welcome
     ),

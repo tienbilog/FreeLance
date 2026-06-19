@@ -40,7 +40,7 @@ fun SchedulerApp(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
-                    title = { Text("FreeLance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                    title = { Text("PlanProfit", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
                     navigationIcon = {
                         IconButton(onClick = { isDrawerVisible = true }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
