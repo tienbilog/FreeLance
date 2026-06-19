@@ -42,6 +42,14 @@ class CloudRepository(private val uid: String) {
         doc.set(data, SetOptions.merge()).await()
     }
 
+    suspend fun load(): List<Project> {
+        val snapshot = doc.get().await()
+        val raw = snapshot.get("list")
+        @Suppress("UNCHECKED_CAST")
+        val maps = raw as? List<Map<String, Any>> ?: emptyList()
+        return maps.map { it.toProject() }
+    }
+
     val scheduleFlow: Flow<Map<DayOfWeek, Double>> = callbackFlow {
         val listener = scheduleDoc.addSnapshotListener { snapshot, _ ->
             val raw = snapshot?.get("pattern")
@@ -55,6 +63,14 @@ class CloudRepository(private val uid: String) {
     suspend fun saveSchedule(schedule: Map<DayOfWeek, Double>) {
         val data = mapOf("pattern" to schedule.mapKeys { it.key.name })
         scheduleDoc.set(data, SetOptions.merge()).await()
+    }
+
+    suspend fun loadSchedule(): Map<DayOfWeek, Double> {
+        val snapshot = scheduleDoc.get().await()
+        val raw = snapshot.get("pattern")
+        @Suppress("UNCHECKED_CAST")
+        val maps = raw as? Map<String, Number> ?: emptyMap()
+        return maps.mapKeys { runCatching { DayOfWeek.valueOf(it.key) }.getOrDefault(DayOfWeek.MONDAY) }.mapValues { it.value.toDouble() }
     }
 
     // -------------------------------------------------------------------------
@@ -74,7 +90,11 @@ class CloudRepository(private val uid: String) {
         "status"        to status.name,
         "assignedDates" to assignedDates.mapKeys { it.key.toString() },
         "hoursLogged"   to hoursLogged,
-        "completedDate" to (completedDate?.toString() ?: "")
+        "completedDate" to (completedDate?.toString() ?: ""),
+        "subtasks"      to subtasks.map { mapOf("id" to it.id, "title" to it.title, "isCompleted" to it.isCompleted) },
+        "taskStatus"    to taskStatus.name,
+        "scheduleWarning" to (scheduleWarning ?: ""),
+        "completedAssignments" to completedAssignments.map { it.toString() }
     )
 
     private fun Map<String, Any>.toProject(): Project {
@@ -85,6 +105,23 @@ class CloudRepository(private val uid: String) {
 
         val datesRaw = get("assignedDates") as? Map<String, Number> ?: emptyMap()
         val assignedDatesMap = datesRaw.mapKeys { LocalDate.parse(it.key) }.mapValues { it.value.toDouble() }
+        
+        val subtasksRaw = get("subtasks") as? List<Map<String, Any>> ?: emptyList()
+        val subtasksList = subtasksRaw.map {
+            Subtask(
+                id = it["id"] as? String ?: "",
+                title = it["title"] as? String ?: "",
+                isCompleted = it["isCompleted"] as? Boolean ?: false
+            )
+        }
+        
+        val compAssigRaw = get("completedAssignments") as? List<String> ?: emptyList()
+        val completedAssignmentsSet = compAssigRaw.mapNotNull { 
+            runCatching { LocalDate.parse(it) }.getOrNull() 
+        }.toSet()
+        
+        val scheduleWarnRaw = get("scheduleWarning") as? String
+        val parsedScheduleWarning = if (scheduleWarnRaw.isNullOrBlank()) null else scheduleWarnRaw
 
         return Project(
             id            = (get("id") as? Long)?.toInt() ?: 0,
@@ -100,7 +137,12 @@ class CloudRepository(private val uid: String) {
                 .getOrDefault(ProjectStatus.POTENTIAL),
             assignedDates = assignedDatesMap,
             hoursLogged   = (get("hoursLogged") as? Double) ?: 0.0,
-            completedDate = dateOrNull("completedDate")
+            completedDate = dateOrNull("completedDate"),
+            subtasks      = subtasksList,
+            taskStatus    = runCatching { TaskStatus.valueOf(get("taskStatus") as? String ?: "NOT_STARTED") }
+                .getOrDefault(TaskStatus.NOT_STARTED),
+            scheduleWarning = parsedScheduleWarning,
+            completedAssignments = completedAssignmentsSet
         )
     }
 }

@@ -308,12 +308,25 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun migrateGuestDataIfNeeded(repo: CloudRepository) {
         val guestProjects = localRepo.load()
         if (guestProjects.isNotEmpty()) {
-            repo.save(guestProjects)
+            val cloudProjects = repo.load()
+            val maxCloudId = cloudProjects.maxOfOrNull { it.id } ?: 0
+            
+            // Assign new IDs to guest projects to avoid collision
+            val newGuestProjects = guestProjects.mapIndexed { index, project -> 
+                project.copy(id = maxCloudId + 1 + index)
+            }
+            
+            val mergedProjects = cloudProjects + newGuestProjects
+            repo.save(mergedProjects)
             localRepo.save(emptyList())
         }
+        
         val guestSchedule = localRepo.loadSchedule()
         if (guestSchedule.isNotEmpty()) {
-            repo.saveSchedule(guestSchedule)
+            val cloudSchedule = repo.loadSchedule()
+            // Cloud schedule takes precedence, but we merge guest entries if they don't exist
+            val mergedSchedule = guestSchedule + cloudSchedule 
+            repo.saveSchedule(mergedSchedule)
             localRepo.saveSchedule(emptyMap())
         }
     }

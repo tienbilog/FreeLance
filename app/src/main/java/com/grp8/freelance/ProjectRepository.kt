@@ -76,6 +76,12 @@ class ProjectRepository(private val context: Context) {
     // Serialised shape. Stored as plain strings/primitives so Gson doesn't need
     // custom adapters for the enum or nullable LocalDate fields.
     // -------------------------------------------------------------------------
+    private data class SubtaskJson(
+        val id: String,
+        val title: String,
+        val isCompleted: Boolean
+    )
+
     private data class ProjectJson(
         val id: Int,
         val name: String,
@@ -89,6 +95,9 @@ class ProjectRepository(private val context: Context) {
         val assignedDates: Map<String, Double>?,
         val hoursLogged: Double,
         val completedDate: String?,
+        val subtasks: List<SubtaskJson>?,
+        val taskStatus: String?,
+        val scheduleWarning: String?,
         val completedAssignments: List<String>?
     )
 
@@ -105,6 +114,9 @@ class ProjectRepository(private val context: Context) {
         assignedDates = if (assignedDates.isEmpty()) null else assignedDates.mapKeys { it.key.toString() },
         hoursLogged   = hoursLogged,
         completedDate = completedDate?.toString(),
+        subtasks      = if (subtasks.isEmpty()) null else subtasks.map { SubtaskJson(it.id, it.title, it.isCompleted) },
+        taskStatus    = taskStatus.name,
+        scheduleWarning = scheduleWarning,
         completedAssignments = if (completedAssignments.isEmpty()) null else completedAssignments.map { it.toString() }
     )
 
@@ -121,6 +133,9 @@ class ProjectRepository(private val context: Context) {
         assignedDates = assignedDates?.mapKeys { LocalDate.parse(it.key) } ?: emptyMap(),
         hoursLogged   = hoursLogged,
         completedDate = completedDate?.let { LocalDate.parse(it) },
+        subtasks      = subtasks?.map { Subtask(it.id, it.title, it.isCompleted) } ?: emptyList(),
+        taskStatus    = runCatching { TaskStatus.valueOf(taskStatus ?: "NOT_STARTED") }.getOrDefault(TaskStatus.NOT_STARTED),
+        scheduleWarning = scheduleWarning,
         completedAssignments = completedAssignments?.map { LocalDate.parse(it) }?.toSet() ?: emptySet()
     )
 }
