@@ -49,7 +49,7 @@ object Scheduler {
 
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, weeklyCapacity, emptyMap())
+        return buildResult(today, ordered, state, weeklyCapacity)
     }
 
     /**
@@ -66,20 +66,18 @@ object Scheduler {
      */
     fun reschedule(
         remainingProjects: List<Project>,
-        weeklyCapacity: Map<DayOfWeek, Double>,
-        capacityOverrides: Map<LocalDate, Double> = emptyMap()
+        weeklyCapacity: Map<DayOfWeek, Double>
     ): ScheduleResult {
         if (remainingProjects.isEmpty()) return ScheduleResult(emptyList(), emptyList(), 0.0)
 
         val today = LocalDate.now()
         val ordered = preSort(remainingProjects)
         val baseCapacity = buildCapacityMap(today, ordered, weeklyCapacity).toMutableMap()
-        capacityOverrides.forEach { (date, hours) -> baseCapacity[date] = hours }
 
         val state = SearchState(dayCapacity = baseCapacity)
         backtrack(ordered, index = 0, today, assignment = mutableMapOf(), income = 0.0, state)
 
-        return buildResult(today, ordered, state, weeklyCapacity, capacityOverrides)
+        return buildResult(today, ordered, state, weeklyCapacity)
     }
 
     // presorting algo implemented first by project deadlines to allow backtracking algorithm
@@ -271,11 +269,9 @@ object Scheduler {
         today: LocalDate,
         projects: List<Project>,
         state: SearchState,
-        weeklyCapacity: Map<DayOfWeek, Double>,
-        capacityOverrides: Map<LocalDate, Double>
+        weeklyCapacity: Map<DayOfWeek, Double>
     ): ScheduleResult {
         val finalCapacity = buildCapacityMap(today, projects, weeklyCapacity)
-        capacityOverrides.forEach { (date, hours) -> finalCapacity[date] = hours }
         projects.forEachIndexed { i, _ ->
             val alloc = state.bestAssignment[i]
             if (alloc != null) {

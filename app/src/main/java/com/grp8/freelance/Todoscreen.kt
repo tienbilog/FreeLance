@@ -36,37 +36,7 @@ import java.util.Locale
 fun ToDoScreen(viewModel: SchedulerViewModel) {
     val allProjects by viewModel.allProjects.collectAsStateWithLifecycle()
     val scheduled = allProjects.filter { it.status == ProjectStatus.SCHEDULED }
-    val pace by viewModel.paceStatus.collectAsStateWithLifecycle()
 
-    var completingAssignment by remember { mutableStateOf<Pair<Project, LocalDate>?>(null) }
-    var showCatchUpFor     by remember { mutableStateOf<PaceStatus.Behind?>(null) }
-
-    LaunchedEffect(pace) {
-        if (pace is PaceStatus.Behind) showCatchUpFor = pace as PaceStatus.Behind
-    }
-
-    completingAssignment?.let { (proj, date) ->
-        CompleteAssignmentDialog(
-            project = proj,
-            date = date,
-            onDismiss = { completingAssignment = null },
-            onConfirm = { actualHours ->
-                viewModel.completeAssignment(proj.id, date, actualHours)
-                completingAssignment = null
-            }
-        )
-    }
-
-    showCatchUpFor?.let { behind ->
-        CatchUpDialog(
-            hoursOver = behind.hoursOver,
-            onDismiss = { showCatchUpFor = null; viewModel.acknowledgePace() },
-            onConfirm = { date, extraHours ->
-                viewModel.rescheduleRemaining(date to extraHours)
-                showCatchUpFor = null
-            }
-        )
-    }
 
     val totalCount = scheduled.size
     val completedCount = scheduled.count { it.taskStatus == TaskStatus.COMPLETED }
@@ -94,16 +64,7 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                 DashboardSummaryCard(totalCount, ongoingCount, completedCount, overallProgress)
             }
 
-            if (pace is PaceStatus.Ahead) {
-                val ahead = pace as PaceStatus.Ahead
-                item {
-                    AheadBanner(
-                        hoursSaved = ahead.hoursSaved,
-                        onMoveUp = { viewModel.rescheduleRemaining(); viewModel.acknowledgePace() },
-                        onDismiss = { viewModel.acknowledgePace() }
-                    )
-                }
-            }
+
 
             if (scheduled.isEmpty()) {
                 item {
@@ -116,7 +77,6 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
             }
 
             val stalledProjects = scheduled.filter { it.assignedDates.isEmpty() && it.taskStatus != TaskStatus.COMPLETED }
-
             if (stalledProjects.isNotEmpty()) {
                 item {
                     Text(
@@ -126,37 +86,21 @@ fun ToDoScreen(viewModel: SchedulerViewModel) {
                     )
                 }
                 items(stalledProjects, key = { "stalled_${it.id}" }) { project ->
-                    ToDoCard(
-                        project = project,
-                        date = LocalDate.now(),
-                        hoursForDay = 0.0,
-                        viewModel = viewModel,
-                        onMarkDone = { completingAssignment = project to LocalDate.now() }
-                    )
+                    ProjectCard(project = project, viewModel = viewModel)
                 }
             }
-
-            val flattened = scheduled.flatMap { proj ->
-                proj.assignedDates.map { (date, hours) -> date to Pair(proj, hours) }
-            }
-            val byDate = flattened.groupBy({ it.first }, { it.second })
-            byDate.keys.sorted().forEach { date ->
+            
+            val validProjects = scheduled.filter { it.assignedDates.isNotEmpty() }
+            if (validProjects.isNotEmpty()) {
                 item {
                     Text(
-                        date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault()) +
-                                " · ${date.format(DATE_FMT)}",
+                        "Active Projects",
                         style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
-                items(byDate[date]!!, key = { "${date}_${it.first.id}" }) { (project, hoursForDay) ->
-                    ToDoCard(
-                        project = project,
-                        date = date,
-                        hoursForDay = hoursForDay,
-                        viewModel = viewModel,
-                        onMarkDone = { completingAssignment = project to date }
-                    )
+                items(validProjects, key = { it.id }) { project ->
+                    ProjectCard(project = project, viewModel = viewModel)
                 }
             }
         }
@@ -206,12 +150,9 @@ fun DashboardSummaryCard(total: Int, ongoing: Int, completed: Int, progress: Flo
 }
 
 @Composable
-private fun ToDoCard(
+private fun ProjectCard(
     project: Project,
-    date: LocalDate,
-    hoursForDay: Double,
-    viewModel: SchedulerViewModel,
-    onMarkDone: () -> Unit
+    viewModel: SchedulerViewModel
 ) {
     var expanded by remember { mutableStateOf(false) }
     var subtaskTitle by remember { mutableStateOf("") }
@@ -222,8 +163,6 @@ private fun ToDoCard(
         TaskStatus.COMPLETED -> MaterialTheme.colorScheme.secondary
     }
 
-    val isAssignmentComplete = project.completedAssignments.contains(date)
-
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         shape = RoundedCornerShape(32.dp),
@@ -232,14 +171,6 @@ private fun ToDoCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.Top) {
-                IconButton(onClick = onMarkDone, modifier = Modifier.size(32.dp), enabled = !isAssignmentComplete) {
-                    Icon(
-                        if (isAssignmentComplete) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = "Mark done",
-                        tint = if (isAssignmentComplete) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text(project.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
@@ -293,7 +224,6 @@ private fun ToDoCard(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         InfoChip("📅 due ${project.deadlineDate.format(DATE_FMT)}")
-                        InfoChip("⏱ ${hoursForDay.fmt()}h today")
                         Spacer(Modifier.weight(1f))
                         IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(24.dp)) {
                             Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = "Expand subtasks")
@@ -306,6 +236,24 @@ private fun ToDoCard(
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 Spacer(Modifier.height(8.dp))
+                
+                if (project.assignedDates.isNotEmpty()) {
+                    Text("▼ Work Sessions", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                    project.assignedDates.forEach { (date, hours) ->
+                        val isSessionComplete = project.completedAssignments.contains(date)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            Checkbox(
+                                checked = isSessionComplete,
+                                onCheckedChange = { viewModel.toggleAssignment(project.id, date) },
+                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                            )
+                            Text("${date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())} · ${date.format(DATE_FMT)} (${hours.fmt()}h)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                Text("▼ Subtasks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
                 
                 project.subtasks.forEach { sub ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -345,168 +293,7 @@ private fun ToDoCard(
                         Icon(Icons.Default.Add, contentDescription = "Add", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     }
                 }
-                
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onMarkDone,
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                ) {
-                    Text("Mark project as done", fontFamily = InterFamily, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                }
             }
         }
     }
-}
-
-@Composable
-private fun AheadBanner(hoursSaved: Double, onMoveUp: () -> Unit, onDismiss: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text("🚀 You're ahead of schedule",
-                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "You finished that project ${hoursSaved.fmt()}h faster than estimated. Want to " +
-                        "re-run the optimizer so your remaining projects can move up?",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
-                    Text("Not now", fontFamily = InterFamily, fontSize = 13.sp)
-                }
-                Button(
-                    onClick = onMoveUp,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Move projects up", fontFamily = InterFamily, fontSize = 13.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompleteAssignmentDialog(
-    project: Project,
-    date: LocalDate,
-    onDismiss: () -> Unit,
-    onConfirm: (Double) -> Unit
-) {
-    var hours by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Finish — ${project.name}") },
-        text = {
-            Column {
-                val scheduledHours = project.assignedDates[date] ?: 0.0
-                Text(
-                    "This was scheduled for ${scheduledHours.fmt()}h today. How many hours did " +
-                            "it actually take you?",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                DialogField(
-                    "Actual hours", hours,
-                    onValueChange = { hours = it; error = false },
-                    keyboardType = KeyboardType.Decimal,
-                    isError = error,
-                    errorMsg = "Enter a valid number"
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val parsed = hours.toDoubleOrNull()
-                if (parsed == null || parsed <= 0) { error = true; return@TextButton }
-                onConfirm(parsed)
-            }) { Text("Done", color = MaterialTheme.colorScheme.primary) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    )
-}
-
-@Composable
-private fun CatchUpDialog(
-    hoursOver: Double,
-    onDismiss: () -> Unit,
-    onConfirm: (LocalDate, Double) -> Unit
-) {
-    val today = LocalDate.now()
-    val upcomingDays = (0..6).map { today.plusDays(it.toLong()) }
-    var selectedDay by remember { mutableStateOf(upcomingDays.first()) }
-    var extraHours  by remember { mutableStateOf(hoursOver.fmt()) }
-    var error by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("You're ${hoursOver.fmt()}h behind") },
-        text = {
-            Column {
-                Text(
-                    "That took longer than estimated. Pick a day you're free to take on " +
-                            "extra hours to help catch up — this boost applies once, just for that day.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    upcomingDays.forEach { day ->
-                        val selected = day == selectedDay
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (selected) MaterialTheme.colorScheme.secondary else Color.Transparent)
-                                .clickable { selectedDay = day }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                day.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
-                                color = if (selected) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onSurface,
-                                fontFamily = InterFamily,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                DialogField(
-                    "Extra hours that day", extraHours,
-                    onValueChange = { extraHours = it; error = false },
-                    keyboardType = KeyboardType.Decimal,
-                    isError = error,
-                    errorMsg = "Enter a valid number"
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val parsed = extraHours.toDoubleOrNull()
-                if (parsed == null || parsed <= 0) { error = true; return@TextButton }
-                onConfirm(selectedDay, parsed)
-            }) { Text("Apply", color = MaterialTheme.colorScheme.secondary) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Not now", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    )
 }

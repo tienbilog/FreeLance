@@ -52,17 +52,18 @@ data class Project(
     /** Hours still believed remaining, based on what's been logged so far. */
     val hoursRemaining: Double get() = (hoursNeeded - hoursLogged).coerceAtLeast(0.0)
 
-    /** Progress percentage based on completed subtasks, or status if no subtasks. */
+    /** Progress percentage based on completed subtasks and work sessions. */
     val progress: Float get() {
-        if (subtasks.isEmpty()) {
-            return when (taskStatus) {
-                TaskStatus.NOT_STARTED -> 0f
-                TaskStatus.ONGOING -> 0.5f
-                TaskStatus.COMPLETED -> 1f
-            }
-        }
-        val completedCount = subtasks.count { it.isCompleted }
-        return completedCount.toFloat() / subtasks.size.toFloat()
+        val totalSessions = assignedDates.size
+        val completedSessionsCount = completedAssignments.size
+        
+        val totalSubtasksCount = subtasks.size
+        val completedSubtasksCount = subtasks.count { it.isCompleted }
+        
+        val totalItems = totalSessions + totalSubtasksCount
+        if (totalItems == 0) return 0f
+        
+        return (completedSessionsCount + completedSubtasksCount).toFloat() / totalItems
     }
 }
 
@@ -88,11 +89,6 @@ data class ScheduleResult(
 // =============================================================================
 
 /** Result of checking whether the user is ahead of or behind their plan. */
-sealed class PaceStatus {
-    data object OnTrack : PaceStatus()
-    data class Ahead(val hoursSaved: Double) : PaceStatus()
-    data class Behind(val hoursOver: Double) : PaceStatus()
-}
 
 // =============================================================================
 // PHASE 4 — MONTHLY INCOME

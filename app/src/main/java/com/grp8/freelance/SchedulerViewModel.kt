@@ -37,8 +37,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     val suggested: StateFlow<ScheduleResult?> = _suggested.asStateFlow()
 
     /** Phase 3 pacing feedback — populated whenever hours are logged. */
-    private val _paceStatus = MutableStateFlow<PaceStatus>(PaceStatus.OnTrack)
-    val paceStatus: StateFlow<PaceStatus> = _paceStatus.asStateFlow()
+    // Pace status removed as requested by user
 
     private var idCtr = 1
 
@@ -184,93 +183,18 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     // =========================================================================
 
     /**
-     * Marks a scheduled project as finished, given the ACTUAL hours it took.
-     * This immediately determines whether the user finished ahead of or
-     * behind their original estimate, and updates [paceStatus] accordingly
-     * so the To-Do screen can offer the right follow-up action:
-     *   • Ahead  → offer to re-run the optimizer and move remaining work up
-     *   • Behind → suggest boosting a future day's capacity to catch up
+     * Toggles a specific work session (assignment) as done or not done.
      */
-    fun completeAssignment(projectId: Int, date: LocalDate, actualHours: Double) {
-        val project = _allProjects.value.find { it.id == projectId } ?: return
-
+    fun toggleAssignment(projectId: Int, date: LocalDate) {
         _allProjects.value = _allProjects.value.map { p ->
             if (p.id == projectId) {
-                val newCompletedAssignments = p.completedAssignments + date
-                val newHoursLogged = p.hoursLogged + actualHours
-                
-                val allAssignmentsCompleted = p.assignedDates.keys.all { it in newCompletedAssignments }
-                val isStrictlyCompleted = allAssignmentsCompleted && p.scheduleWarning == null && p.assignedDates.values.sum() >= p.hoursNeeded - 0.01
-                
-                val newTaskStatus = when {
-                    newCompletedAssignments.isEmpty() -> TaskStatus.NOT_STARTED
-                    allAssignmentsCompleted -> TaskStatus.COMPLETED
-                    else -> TaskStatus.ONGOING
-                }
-                
-                p.copy(
-                    completedAssignments = newCompletedAssignments,
-                    hoursLogged = newHoursLogged,
-                    status = if (isStrictlyCompleted) ProjectStatus.DONE else ProjectStatus.SCHEDULED,
-                    completedDate = if (isStrictlyCompleted) LocalDate.now() else null,
-                    taskStatus = newTaskStatus
-                )
+                val isComplete = p.completedAssignments.contains(date)
+                val newCompletedAssignments = if (isComplete) p.completedAssignments - date else p.completedAssignments + date
+                p.copy(completedAssignments = newCompletedAssignments).evaluateCompletion()
             } else p
         }
         persist()
-
-        val scheduledHoursForDate = project.assignedDates[date] ?: 0.0
-        val delta = scheduledHoursForDate - actualHours
-        _paceStatus.value = when {
-            delta > 0.0  -> PaceStatus.Ahead(delta)
-            delta < 0.0  -> PaceStatus.Behind(-delta)
-            else         -> PaceStatus.OnTrack
-        }
     }
-
-    /**
-     * Re-optimizes the remaining (not-yet-done) scheduled projects.
-     *
-     * Used in two situations, both routed through this one function:
-     *  • "Ahead" — user finished early, wants to pull future projects forward.
-     *    Pass no override; the freed-up capacity from completed/lighter-than-
-     *    estimated work is already reflected via hoursRemaining.
-     *  • "Behind" — user grants a one-time capacity boost to a specific future
-     *    day to help catch up. Pass that single day/hours pair as the override.
-     */
-    fun rescheduleRemaining(capacityOverride: Pair<LocalDate, Double>? = null) {
-        val remaining = scheduledProjects
-        if (remaining.isEmpty()) return
-
-        val overrides = capacityOverride?.let { (date, hours) -> mapOf(date to hours) } ?: emptyMap()
-        val result = Scheduler.reschedule(remaining, _weeklySchedule.value, capacityOverrides = overrides)
-
-        val newDates = result.accepted.associate { it.project.id to it.assignments }
-        val today = LocalDate.now()
-        
-        _allProjects.value = _allProjects.value.map { p ->
-            if (p.status != ProjectStatus.SCHEDULED) return@map p
-            
-            val pastAssignments = p.assignedDates.filterKeys { it.isBefore(today) }
-            val newFutureAssignments = newDates[p.id] ?: emptyMap()
-            val mergedAssignments = pastAssignments + newFutureAssignments
-            
-            val totalScheduled = mergedAssignments.values.sum()
-            val totalAccounted = totalScheduled + p.hoursLogged
-            
-            val warning = if (totalAccounted < p.hoursNeeded - 0.01) {
-                "Project could not be fully scheduled before its deadline. (${totalAccounted.fmt()}h scheduled / ${p.hoursNeeded.fmt()}h total)"
-            } else null
-            
-            p.copy(assignedDates = mergedAssignments, scheduleWarning = warning)
-        }
-        persist()
-        // The reschedule action itself resolves whatever ahead/behind state
-        // triggered it, so clear the banner once applied.
-        _paceStatus.value = PaceStatus.OnTrack
-    }
-
-    fun acknowledgePace() { _paceStatus.value = PaceStatus.OnTrack }
 
     // =========================================================================
     // PHASE 4 — MONTHLY INCOME
@@ -292,20 +216,34 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
         persist()
     }
 
-    private fun Project.withRecalculatedStatus(): Project {
-        val newStatus = when {
-            assignedDates.isEmpty() -> TaskStatus.NOT_STARTED
-            completedAssignments.isEmpty() -> TaskStatus.NOT_STARTED
-            assignedDates.keys.all { it in completedAssignments } -> TaskStatus.COMPLETED
+    private fun Project.evaluateCompletion(): Project {
+        val allAssignmentsCompleted = assignedDates.isNotEmpty() && assignedDates.keys.all { it in completedAssignments }
+        val allSubtasksCompleted = subtasks.isEmpty() || subtasks.all { it.isCompleted }
+        
+        // Strict completion requires EVERYTHING to be done, plus no missing hours/warnings
+        val isStrictlyCompleted = assignedDates.isNotEmpty() && allAssignmentsCompleted && allSubtasksCompleted && scheduleWarning == null && assignedDates.values.sum() >= hoursNeeded - 0.01
+        
+        val newTaskStatus = when {
+            progress == 0f -> TaskStatus.NOT_STARTED
+            progress == 1f -> TaskStatus.COMPLETED
             else -> TaskStatus.ONGOING
         }
-        return this.copy(taskStatus = newStatus)
+        
+        // Update hoursLogged automatically based on completed assignments
+        val inferredHoursLogged = completedAssignments.sumOf { assignedDates[it] ?: 0.0 }
+        
+        return this.copy(
+            hoursLogged = inferredHoursLogged,
+            status = if (isStrictlyCompleted) ProjectStatus.DONE else ProjectStatus.SCHEDULED,
+            completedDate = if (isStrictlyCompleted) LocalDate.now() else null,
+            taskStatus = newTaskStatus
+        )
     }
 
     fun addSubtask(projectId: Int, title: String) {
         _allProjects.value = _allProjects.value.map { p ->
             if (p.id == projectId) {
-                p.copy(subtasks = p.subtasks + Subtask(title = title)).withRecalculatedStatus()
+                p.copy(subtasks = p.subtasks + Subtask(title = title)).evaluateCompletion()
             } else p
         }
         persist()
@@ -316,7 +254,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
             if (p.id == projectId) {
                 p.copy(subtasks = p.subtasks.map { s ->
                     if (s.id == subtaskId) s.copy(isCompleted = !s.isCompleted) else s
-                }).withRecalculatedStatus()
+                }).evaluateCompletion()
             } else p
         }
         persist()
@@ -325,7 +263,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
     fun removeSubtask(projectId: Int, subtaskId: String) {
         _allProjects.value = _allProjects.value.map { p ->
             if (p.id == projectId) {
-                p.copy(subtasks = p.subtasks.filter { it.id != subtaskId }).withRecalculatedStatus()
+                p.copy(subtasks = p.subtasks.filter { it.id != subtaskId }).evaluateCompletion()
             } else p
         }
         persist()
@@ -333,7 +271,7 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun updateTaskStatus(projectId: Int, status: TaskStatus) {
         _allProjects.value = _allProjects.value.map { p ->
-            if (p.id == projectId) p.copy(taskStatus = status) else p
+            if (p.id == projectId) p.copy(taskStatus = status).evaluateCompletion() else p
         }
         persist()
     }
