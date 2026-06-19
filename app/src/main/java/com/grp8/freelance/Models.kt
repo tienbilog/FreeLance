@@ -17,6 +17,14 @@ enum class RateType { HOURLY, FIXED }
 // =============================================================================
 enum class ProjectStatus { POTENTIAL, SCHEDULED, DONE }
 
+enum class TaskStatus { NOT_STARTED, ONGOING, COMPLETED }
+
+data class Subtask(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val isCompleted: Boolean = false
+)
+
 data class Project(
     val id: Int,
     val name: String,
@@ -29,7 +37,9 @@ data class Project(
     val status: ProjectStatus = ProjectStatus.POTENTIAL,
     val assignedDates: Map<LocalDate, Double> = emptyMap(), // date -> hours allocated
     val hoursLogged: Double = 0.0,            // actual hours worked so far (Phase 3)
-    val completedDate: LocalDate? = null      // set once marked done (Phase 3 → 4)
+    val completedDate: LocalDate? = null,     // set once marked done (Phase 3 → 4)
+    val subtasks: List<Subtask> = emptyList(),
+    val taskStatus: TaskStatus = TaskStatus.NOT_STARTED
 ) {
     /** Total income this project earns, regardless of rate type. */
     val totalIncome: Double get() = when (rateType) {
@@ -39,6 +49,19 @@ data class Project(
 
     /** Hours still believed remaining, based on what's been logged so far. */
     val hoursRemaining: Double get() = (hoursNeeded - hoursLogged).coerceAtLeast(0.0)
+
+    /** Progress percentage based on completed subtasks, or status if no subtasks. */
+    val progress: Float get() {
+        if (subtasks.isEmpty()) {
+            return when (taskStatus) {
+                TaskStatus.NOT_STARTED -> 0f
+                TaskStatus.ONGOING -> 0.5f
+                TaskStatus.COMPLETED -> 1f
+            }
+        }
+        val completedCount = subtasks.count { it.isCompleted }
+        return completedCount.toFloat() / subtasks.size.toFloat()
+    }
 }
 
 data class ScheduledProject(

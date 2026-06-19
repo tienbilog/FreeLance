@@ -1,6 +1,7 @@
 package com.grp8.freelance
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -19,6 +20,11 @@ class ProjectRepository(private val context: Context) {
     private val gson = Gson()
     private val KEY = stringPreferencesKey("project_list")
     private val SCHEDULE_KEY = stringPreferencesKey("weekly_pattern")
+    private val ONBOARDING_KEY = booleanPreferencesKey("has_completed_onboarding")
+
+    val hasCompletedOnboardingFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[ONBOARDING_KEY] ?: false
+    }
 
     val scheduleFlow: Flow<Map<DayOfWeek, Double>> = context.dataStore.data.map { prefs ->
         val json = prefs[SCHEDULE_KEY] ?: return@map emptyMap()
@@ -60,6 +66,10 @@ class ProjectRepository(private val context: Context) {
         val map = schedule.mapKeys { it.key.name }
         val json = gson.toJson(map)
         context.dataStore.edit { prefs -> prefs[SCHEDULE_KEY] = json }
+    }
+
+    suspend fun setOnboardingCompleted() {
+        context.dataStore.edit { prefs -> prefs[ONBOARDING_KEY] = true }
     }
 
     // -------------------------------------------------------------------------

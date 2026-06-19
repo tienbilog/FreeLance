@@ -2,13 +2,28 @@ package com.grp8.freelance.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Material3 defaults (kept for Theme.kt compatibility) ──────────────────
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Modern Green Accent SaaS Palette
+val GreenAccent = Color(0xFF10B981)
+val GreenAccentLight = Color(0xFFD1FAE5)
 
-// ── FreeLance additions ────────────────────────────────────────────────────
-val PageBg = Color(0xFFF4F6FA)
+val BackgroundSoftGray = Color(0xFFF9FAFB)
+val SurfaceWhite = Color(0xFFFFFFFF)
+
+val TextCharcoal = Color(0xFF111827)
+val TextNeutralGray = Color(0xFF6B7280)
+
+val SurfaceVariantSoft = Color(0xFFF3F4F6)
+val OutlineLight = Color(0xFFE5E7EB)
+
+val ErrorRed = Color(0xFFEF4444)
+val ErrorRedLight = Color(0xFFFFE5E5)
+
+// Legacy Aliases mapped to the new Theme to satisfy unmigrated files
+val White = SurfaceWhite
+val Ink = TextCharcoal
+val SlateDeep = TextNeutralGray
+val SlateMid = OutlineLight
+val SlateCard = SurfaceVariantSoft
+val AccentBlue = GreenAccent
+val AccentBlueSoft = GreenAccentLight
+val AccentRed = ErrorRed

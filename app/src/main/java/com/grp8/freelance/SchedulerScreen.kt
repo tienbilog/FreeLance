@@ -1,35 +1,22 @@
 package com.grp8.freelance
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.WorkOutline
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.grp8.freelance.ui.theme.*
-import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.grp8.freelance.ui.components.AppBottomNavigation
+import com.grp8.freelance.ui.components.SheetEdge
+import com.grp8.freelance.ui.components.SheetShape
+import com.grp8.freelance.ui.components.UtilityDrawer
+import java.time.format.DateTimeFormatter
 
 /** Shared date format used across every tab. */
 val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
-
-private data class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-
-private val TABS = listOf(
-    Tab("Optimizer", Icons.Default.WorkOutline),
-    Tab("Schedule",  Icons.Default.CalendarMonth),
-    Tab("To-Do",     Icons.Default.CheckCircle),
-    Tab("Income",    Icons.Default.AttachMoney)
-)
 
 /**
  * Top-level tab host for the four phases of the app:
@@ -38,53 +25,56 @@ private val TABS = listOf(
  *   2. To-Do     — the committed schedule; log hours, mark done, rebalance pace (Phase 3)
  *   3. Income    — monthly earnings from completed projects (Phase 4)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchedulerApp(
     viewModel: SchedulerViewModel,
     username: String?,
     onSignOut: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val allProjects by viewModel.allProjects.collectAsStateWithLifecycle()
-    val scheduledCount = allProjects.count { it.status == ProjectStatus.SCHEDULED }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var isDrawerVisible by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = White,
-        bottomBar = {
-            NavigationBar(containerColor = White, tonalElevation = 0.dp) {
-                TABS.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick  = { selectedTab = index },
-                        icon     = {
-                            if (index == 2 && scheduledCount > 0) {
-                                BadgedBox(badge = { Badge { Text("$scheduledCount") } }) {
-                                    Icon(tab.icon, contentDescription = tab.label)
-                                }
-                            } else {
-                                Icon(tab.icon, contentDescription = tab.label)
-                            }
-                        },
-                        label = { Text(tab.label, fontFamily = InterFamily, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor   = AccentBlue,
-                            selectedTextColor   = AccentBlue,
-                            indicatorColor      = AccentBlueSoft,
-                            unselectedIconColor = SlateDeep,
-                            unselectedTextColor = SlateDeep
-                        )
-                    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = { Text("FreeLance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                    navigationIcon = {
+                        IconButton(onClick = { isDrawerVisible = true }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                )
+            },
+            bottomBar = {
+                AppBottomNavigation(
+                    selectedIndex = selectedTab,
+                    onItemSelected = { selectedTab = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(bottom = padding.calculateBottomPadding(), top = padding.calculateTopPadding()).fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> OptimizerScreen(viewModel, username, onSignOut) // We might refactor out onSignOut from here since it's in the drawer
+                    1 -> ScheduleScreen(viewModel, onAccepted = { selectedTab = 2 })
+                    2 -> ToDoScreen(viewModel)
+                    3 -> IncomeScreen(viewModel)
                 }
             }
         }
-    ) { padding ->
-        Box(modifier = Modifier.padding(bottom = padding.calculateBottomPadding())) {
-            when (selectedTab) {
-                0 -> OptimizerScreen(viewModel, username, onSignOut)
-                1 -> ScheduleScreen(viewModel, onAccepted = { selectedTab = 2 })
-                2 -> ToDoScreen(viewModel)
-                3 -> IncomeScreen(viewModel)
-            }
-        }
+
+        // Overlay Drawer on top of Scaffold
+        UtilityDrawer(
+            edge = SheetEdge.LEFT,
+            shapeVariant = SheetShape.Default,
+            isVisible = isDrawerVisible,
+            onDismiss = { isDrawerVisible = false },
+            username = username,
+            onLogout = onSignOut
+        )
     }
 }

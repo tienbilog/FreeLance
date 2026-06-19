@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -41,7 +42,16 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var idCtr = 1
 
+    val hasCompletedOnboarding: StateFlow<Boolean> = localRepo.hasCompletedOnboardingFlow
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), false)
+
     init { collectFrom(local = true) }
+
+    fun completeOnboarding() {
+        viewModelScope.launch {
+            localRepo.setOnboardingCompleted()
+        }
+    }
 
     fun onUserChanged(user: FirebaseUser?) {
         if (user == null || user.isAnonymous) {
@@ -244,6 +254,53 @@ class SchedulerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun deleteAllIncomeRecords() {
         _allProjects.value = _allProjects.value.filter { it.status != ProjectStatus.DONE }
+        persist()
+    }
+
+    private fun Project.withRecalculatedStatus(): Project {
+        if (subtasks.isEmpty()) return this
+        val completedCount = subtasks.count { it.isCompleted }
+        val newStatus = when {
+            completedCount == 0 -> TaskStatus.NOT_STARTED
+            completedCount == subtasks.size -> TaskStatus.COMPLETED
+            else -> TaskStatus.ONGOING
+        }
+        return this.copy(taskStatus = newStatus)
+    }
+
+    fun addSubtask(projectId: Int, title: String) {
+        _allProjects.value = _allProjects.value.map { p ->
+            if (p.id == projectId) {
+                p.copy(subtasks = p.subtasks + Subtask(title = title)).withRecalculatedStatus()
+            } else p
+        }
+        persist()
+    }
+
+    fun toggleSubtask(projectId: Int, subtaskId: String) {
+        _allProjects.value = _allProjects.value.map { p ->
+            if (p.id == projectId) {
+                p.copy(subtasks = p.subtasks.map { s ->
+                    if (s.id == subtaskId) s.copy(isCompleted = !s.isCompleted) else s
+                }).withRecalculatedStatus()
+            } else p
+        }
+        persist()
+    }
+
+    fun removeSubtask(projectId: Int, subtaskId: String) {
+        _allProjects.value = _allProjects.value.map { p ->
+            if (p.id == projectId) {
+                p.copy(subtasks = p.subtasks.filter { it.id != subtaskId }).withRecalculatedStatus()
+            } else p
+        }
+        persist()
+    }
+
+    fun updateTaskStatus(projectId: Int, status: TaskStatus) {
+        _allProjects.value = _allProjects.value.map { p ->
+            if (p.id == projectId) p.copy(taskStatus = status) else p
+        }
         persist()
     }
 

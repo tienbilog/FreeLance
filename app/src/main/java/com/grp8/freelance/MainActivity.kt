@@ -7,6 +7,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Modifier
+import com.grp8.freelance.ui.components.AppOnboardingDialog
 import com.grp8.freelance.ui.theme.FreelanceTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,23 +45,35 @@ class MainActivity : ComponentActivity() {
                 // ------------------------------------------------------------------
                 var guestMode by remember { mutableStateOf(false) }
                 val isAuthenticated = currentUser != null && !currentUser!!.isAnonymous
+                val hasCompletedOnboarding by schedViewModel.hasCompletedOnboarding.collectAsStateWithLifecycle()
 
                 when {
                     isAuthenticated || guestMode -> {
-                        SchedulerApp(
-                            viewModel = schedViewModel,
-                            username  = currentUser?.displayName,
-                            onSignOut = {
-                                authViewModel.signOut()
-                                guestMode = false
+                        Box(modifier = Modifier.fillMaxSize().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)) {
+                            SchedulerApp(
+                                viewModel = schedViewModel,
+                                username  = currentUser?.displayName,
+                                onSignOut = {
+                                    authViewModel.signOut()
+                                    guestMode = false
+                                }
+                            )
+
+                            if (!hasCompletedOnboarding) {
+                                AppOnboardingDialog(
+                                    onDismiss = { schedViewModel.completeOnboarding() },
+                                    onGetStarted = { schedViewModel.completeOnboarding() }
+                                )
                             }
-                        )
+                        }
                     }
                     else -> {
-                        AuthScreen(
-                            authViewModel    = authViewModel,
-                            onContinueAsGuest = { guestMode = true }
-                        )
+                        Box(modifier = Modifier.fillMaxSize().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)) {
+                            AuthScreen(
+                                authViewModel    = authViewModel,
+                                onContinueAsGuest = { guestMode = true }
+                            )
+                        }
                     }
                 }
             }

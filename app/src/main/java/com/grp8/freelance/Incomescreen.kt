@@ -37,7 +37,7 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
     val summary = viewModel.incomeForMonth(selectedMonth)
     val availableMonths = viewModel.availableIncomeMonths()
 
-    Scaffold(containerColor = White) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(
             contentPadding = PaddingValues(
                 start = 20.dp, end = 20.dp,
@@ -46,36 +46,36 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Text("Income", style = MaterialTheme.typography.displayLarge, color = Ink)
+                Text("Income", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Earnings from completed projects.",
-                    style = MaterialTheme.typography.bodyMedium, color = SlateDeep
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = AccentBlueSoft),
-                    elevation = CardDefaults.cardElevation(0.dp)
+                    shape = RoundedCornerShape(32.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     Column(Modifier.padding(18.dp)) {
                         Text("Total earned (all time)",
-                            style = MaterialTheme.typography.bodySmall, color = AccentBlue)
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "₱${totalEverEarned.money()}",
                             fontFamily = InterFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 28.sp,
-                            color = AccentBlue
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             "${done.size} project${if (done.size == 1) "" else "s"} completed",
-                            style = MaterialTheme.typography.bodySmall, color = AccentBlue
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -89,11 +89,11 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Ink)
+                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = MaterialTheme.colorScheme.onSurface)
                     }
                     Text(
                         "${selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${selectedMonth.year}",
-                        style = MaterialTheme.typography.titleMedium, color = Ink
+                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(
                         onClick = { selectedMonth = selectedMonth.plusMonths(1) },
@@ -102,7 +102,7 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                         Icon(
                             Icons.Default.ChevronRight,
                             contentDescription = "Next month",
-                            tint = if (selectedMonth < YearMonth.now()) Ink else SlateMid
+                            tint = if (selectedMonth < YearMonth.now()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
                         )
                     }
                 }
@@ -111,20 +111,20 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = SlateCard),
-                    elevation = CardDefaults.cardElevation(0.dp)
+                    shape = RoundedCornerShape(32.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("This month's total",
-                            style = MaterialTheme.typography.bodyMedium, color = SlateDeep)
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             "₱${summary.totalIncome.money()}",
                             fontFamily = InterFamily, fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp, color = AccentGreen
+                            fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
@@ -138,21 +138,20 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                         else
                             "No completed projects in this month.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = SlateDeep
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
                 item {
                     Spacer(Modifier.height(4.dp))
-                    Text("Completed Projects", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text("Completed Projects", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 }
                 items(summary.entries, key = { it.project.id }) { entry ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SlateMid),
-                        elevation = CardDefaults.cardElevation(0.dp)
+                        shape = RoundedCornerShape(32.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp).fillMaxWidth(),
@@ -161,16 +160,16 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                         ) {
                             Column {
                                 Text(entry.project.name,
-                                    style = MaterialTheme.typography.titleMedium, color = Ink)
+                                    style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 Text(
                                     "${entry.project.clientName} · completed ${entry.completedDate.format(DATE_FMT)}",
-                                    style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Text(
                                 "₱${entry.amount.money()}",
                                 fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp, color = AccentGreen
+                                fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary
                             )
                         }
                     }
@@ -185,7 +184,7 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                         onClick = { showDeleteAllDialog = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Delete All Income Records", color = AccentRed, fontFamily = InterFamily, fontWeight = FontWeight.Medium)
+                        Text("Delete All Income Records", color = MaterialTheme.colorScheme.error, fontFamily = InterFamily, fontWeight = FontWeight.Medium)
                     }
                 }
                 if (showDeleteAllDialog) {
@@ -197,10 +196,10 @@ fun IncomeScreen(viewModel: SchedulerViewModel) {
                             TextButton(onClick = {
                                 showDeleteAllDialog = false
                                 viewModel.deleteAllIncomeRecords()
-                            }) { Text("Delete", color = AccentRed) }
+                            }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel", color = SlateDeep) }
+                            TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     )
                 }

@@ -40,7 +40,7 @@ fun ScheduleScreen(
     val potential = allProjects.filter { it.status == ProjectStatus.POTENTIAL }
     val suggested by viewModel.suggested.collectAsStateWithLifecycle()
 
-    Scaffold(containerColor = White) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         if (suggested == null) {
             // ---- Empty / pre-run state ----
             Column(
@@ -51,7 +51,7 @@ fun ScheduleScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("Suggested Schedule", style = MaterialTheme.typography.displayLarge, color = Ink)
+                Text("Suggested Schedule", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (potential.isEmpty())
@@ -60,7 +60,7 @@ fun ScheduleScreen(
                         "Run the optimizer to see which of your ${potential.size} potential " +
                                 "project(s) fit your schedule, and which don't.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SlateDeep,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Spacer(Modifier.height(24.dp))
@@ -68,7 +68,7 @@ fun ScheduleScreen(
                     onClick = { viewModel.runOptimizer() },
                     enabled = potential.isNotEmpty(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.height(52.dp)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null,
@@ -88,16 +88,16 @@ fun ScheduleScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
-                    Text("Suggested Schedule", style = MaterialTheme.typography.displayLarge, color = Ink)
+                    Text("Suggested Schedule", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MetricCard("Total income", "₱${result.totalIncome.fmt()}",
-                            AccentBlueSoft, AccentBlue, Modifier.weight(1f))
-                        MetricCard("Can accept", "${result.accepted.size}", SlateCard, Ink,
+                            MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                        MetricCard("Can accept", "${result.accepted.size}", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface,
                             Modifier.weight(1f))
                         MetricCard("Can't accept", "${result.unscheduled.size}",
-                            if (result.unscheduled.isEmpty()) SlateCard else Color(0xFFFFE5E5),
-                            if (result.unscheduled.isEmpty()) Ink else AccentRed,
+                            if (result.unscheduled.isEmpty()) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFFFE5E5),
+                            if (result.unscheduled.isEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                             Modifier.weight(1f))
                     }
                 }
@@ -105,7 +105,7 @@ fun ScheduleScreen(
                 if (result.accepted.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(4.dp))
-                        Text("Proposed Schedule", style = MaterialTheme.typography.titleMedium, color = Ink)
+                        Text("Proposed Schedule", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                     val flattened = result.accepted.flatMap { sp ->
                         sp.assignments.map { (date, hours) ->
@@ -121,31 +121,31 @@ fun ScheduleScreen(
                 if (result.unscheduled.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(4.dp))
-                        Text("Can't Accept These", style = MaterialTheme.typography.titleMedium, color = Ink)
+                        Text("Can't Accept These", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                     items(result.unscheduled) { item ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(32.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE5E5)),
-                            elevation = CardDefaults.cardElevation(0.dp)
+                            border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
-                                Text("⚠", color = AccentRed, fontSize = 16.sp,
+                                Text("⚠", color = MaterialTheme.colorScheme.error, fontSize = 16.sp,
                                     modifier = Modifier.padding(end = 10.dp, top = 2.dp))
                                 Column {
                                     Text(item.project.name,
-                                        style = MaterialTheme.typography.titleMedium, color = Ink)
+                                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                     Text(
                                         "${item.project.clientName} · due ${item.project.deadlineDate.format(DATE_FMT)}",
-                                        style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(item.constraint,
-                                        style = MaterialTheme.typography.bodySmall, color = AccentRed)
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -154,25 +154,25 @@ fun ScheduleScreen(
 
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick = { viewModel.discardSuggestion() },
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Text("Discard", fontFamily = InterFamily)
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
                             onClick = {
                                 viewModel.acceptSchedule()
                                 onAccepted()
                             },
                             enabled = result.accepted.isNotEmpty(),
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Text("Accept Schedule", fontFamily = InterFamily, fontWeight = FontWeight.SemiBold)
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.discardSuggestion() },
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text("Discard", fontFamily = InterFamily)
                         }
                     }
                 }
@@ -183,11 +183,11 @@ fun ScheduleScreen(
 
 @Composable
 fun MetricCard(label: String, value: String, bg: Color, valueColor: Color, modifier: Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
+    Card(modifier = modifier, shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = bg),
-        elevation = CardDefaults.cardElevation(0.dp)) {
+        border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)) {
         Column(Modifier.padding(14.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Text(value, fontFamily = InterFamily, fontWeight = FontWeight.Bold,
                 fontSize = 17.sp, color = valueColor)
@@ -202,9 +202,9 @@ fun ScheduleDayCard(date: LocalDate, items: List<Pair<ScheduledProject, Double>>
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard),
-        elevation = CardDefaults.cardElevation(0.dp)
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
@@ -215,23 +215,23 @@ fun ScheduleDayCard(date: LocalDate, items: List<Pair<ScheduledProject, Double>>
                 Column {
                     Text(
                         date.format(DateTimeFormatter.ofPattern("EEEE")),
-                        style = MaterialTheme.typography.titleMedium, color = Ink
+                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
-                        style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("₱${totalIncome.fmt()}", fontFamily = InterFamily,
-                        fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentBlue)
+                        fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
                     Text("${totalHours.fmt()}h total",
-                        style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
             Spacer(Modifier.height(10.dp))
-            HorizontalDivider(color = SlateMid, thickness = 0.5.dp)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
             items.forEach { (sp, hoursForDay) ->
@@ -239,27 +239,27 @@ fun ScheduleDayCard(date: LocalDate, items: List<Pair<ScheduledProject, Double>>
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(White)
+                        .background(MaterialTheme.colorScheme.background)
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(sp.project.name, style = MaterialTheme.typography.bodyLarge,
-                            color = Ink, fontWeight = FontWeight.Medium)
+                            color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
                         Text(sp.project.clientName,
-                            style = MaterialTheme.typography.bodySmall, color = SlateDeep)
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         val incomeForDay = (hoursForDay / sp.project.hoursNeeded) * sp.project.totalIncome
                         Text("₱${incomeForDay.fmt()}",
                             fontFamily = InterFamily, fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp, color = Ink)
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             "${hoursForDay.fmt()}h" +
                                     if (sp.project.rateType == RateType.HOURLY)
                                         " @ ₱${sp.project.ratePerHour.fmt()}/hr" else " · fixed",
-                            style = MaterialTheme.typography.bodySmall, color = SlateDeep
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
